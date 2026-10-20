@@ -1,0 +1,31 @@
+[
+  {
+    "name": "flight_info",
+    "description": "Bugünkü uçuşların sayısal özetini döndürür: total (toplam uçuş), cancelled (iptal edilen) ve delayed (gecikmeli) sayıları. Sayılar seçilen hareket türüne göre hesaplanır.\n\nNe zaman kullanılır: bugünkü toplam, geliş ya da kalkış uçuşu sayısı; iptal edilen ya da gecikmeli uçuş sayısı sorulduğunda.\n\nNe zaman KULLANILMAZ: tek bir sefer hakkında bilgi istendiğinde (search kullan); uçuşları sıralama ya da listeleme istendiğinde; tescil, havayolu, uçak tipi gibi bu aracın desteklemediği bir kırılımla sayım istendiğinde; bir kaydı değiştirme isteğinde. Bu durumlarda araç çağırmadan, isteğin mevcut araçlarla karşılanamadığını söyle.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "movement_type": {
+          "type": "string",
+          "enum": ["ALL", "ARRIVAL", "DEPARTURE"],
+          "description": "ALL: tüm uçuşlar, ARRIVAL: gelen (geliş) uçuşları, DEPARTURE: giden (kalkış) uçuşları. Kullanıcı yön belirtmediyse ALL."
+        }
+      },
+      "required": ["movement_type"]
+    }
+  },
+  {
+    "name": "search",
+    "description": "Sefer numarasıyla tek bir uçuşun kaydını döndürür: tarife ve tahmini saat, iptal durumu, atanmış stand ve gate. Sefer bulunamazsa bunu bildirir.\n\nNe zaman kullanılır: kullanıcı belirli bir sefer numarası verip o uçuşun saatini, durumunu, stand'ını ya da gate'ini sorduğunda; bir seferin var olup olmadığı sorulduğunda.\n\nNe zaman KULLANILMAZ: uçuş sayısı istendiğinde (flight_info kullan); uçuşları sıralama ya da listeleme istendiğinde; tescil (ör. TC-XXX) ya da uçak bilgisiyle arama veya sayım istendiğinde, çünkü bu araç yalnızca sefer numarası kabul eder; bir kaydı değiştirme isteğinde. Bu durumlarda araç çağırmadan, isteğin mevcut araçlarla karşılanamadığını söyle.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "flight_no": {
+          "type": "string",
+          "description": "Havayolu kodu ve sayıdan oluşan sefer numarası, ör. \"TK2345\". Callsign (ör. THY2345) ya da tescil değildir."
+        }
+      },
+      "required": ["flight_no"]
+    }
+  }
+]

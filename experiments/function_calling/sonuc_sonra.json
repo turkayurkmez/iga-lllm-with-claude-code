@@ -1,0 +1,392 @@
+{
+  "model": "claude-sonnet-5-5",
+  "tools_file": "experiments/function_calling/araclar_iyi.json",
+  "repeats": 3,
+  "correct": 33,
+  "total": 36,
+  "accuracy": 0.917,
+  "questions": [
+    {
+      "id": "S1",
+      "question": "Bugün kaç uçuş var?",
+      "expected": [
+        "flight_info"
+      ],
+      "correct": 3,
+      "attempts": [
+        {
+          "tools": [
+            "flight_info"
+          ],
+          "stop_reason": "tool_use",
+          "error": null,
+          "correct": true
+        },
+        {
+          "tools": [
+            "flight_info"
+          ],
+          "stop_reason": "tool_use",
+          "error": null,
+          "correct": true
+        },
+        {
+          "tools": [
+            "flight_info"
+          ],
+          "stop_reason": "tool_use",
+          "error": null,
+          "correct": true
+        }
+      ]
+    },
+    {
+      "id": "S2",
+      "question": "Bugün kaç geliş uçuşu var?",
+      "expected": [
+        "flight_info"
+      ],
+      "correct": 3,
+      "attempts": [
+        {
+          "tools": [
+            "flight_info"
+          ],
+          "stop_reason": "tool_use",
+          "error": null,
+          "correct": true
+        },
+        {
+          "tools": [
+            "flight_info"
+          ],
+          "stop_reason": "tool_use",
+          "error": null,
+          "correct": true
+        },
+        {
+          "tools": [
+            "flight_info"
+          ],
+          "stop_reason": "tool_use",
+          "error": null,
+          "correct": true
+        }
+      ]
+    },
+    {
+      "id": "S3",
+      "question": "Bugün kaç kalkış var?",
+      "expected": [
+        "flight_info"
+      ],
+      "correct": 3,
+      "attempts": [
+        {
+          "tools": [
+            "flight_info"
+          ],
+          "stop_reason": "tool_use",
+          "error": null,
+          "correct": true
+        },
+        {
+          "tools": [
+            "flight_info"
+          ],
+          "stop_reason": "tool_use",
+          "error": null,
+          "correct": true
+        },
+        {
+          "tools": [
+            "flight_info"
+          ],
+          "stop_reason": "tool_use",
+          "error": null,
+          "correct": true
+        }
+      ]
+    },
+    {
+      "id": "S4",
+      "question": "Bugün kaç uçuş iptal edildi?",
+      "expected": [
+        "flight_info"
+      ],
+      "correct": 3,
+      "attempts": [
+        {
+          "tools": [
+            "flight_info"
+          ],
+          "stop_reason": "tool_use",
+          "error": null,
+          "correct": true
+        },
+        {
+          "tools": [
+            "flight_info"
+          ],
+          "stop_reason": "tool_use",
+          "error": null,
+          "correct": true
+        },
+        {
+          "tools": [
+            "flight_info"
+          ],
+          "stop_reason": "tool_use",
+          "error": null,
+          "correct": true
+        }
+      ]
+    },
+    {
+      "id": "S5",
+      "question": "Bugün kaç uçuş gecikmeli?",
+      "expected": [
+        "flight_info"
+      ],
+      "correct": 3,
+      "attempts": [
+        {
+          "tools": [
+            "flight_info"
+          ],
+          "stop_reason": "tool_use",
+          "error": null,
+          "correct": true
+        },
+        {
+          "tools": [
+            "flight_info"
+          ],
+          "stop_reason": "tool_use",
+          "error": null,
+          "correct": true
+        },
+        {
+          "tools": [
+            "flight_info"
+          ],
+          "stop_reason": "tool_use",
+          "error": null,
+          "correct": true
+        }
+      ]
+    },
+    {
+      "id": "S6",
+      "question": "TK2345 hangi gate'te?",
+      "expected": [
+        "search"
+      ],
+      "correct": 3,
+      "attempts": [
+        {
+          "tools": [
+            "search"
+          ],
+          "stop_reason": "tool_use",
+          "error": null,
+          "correct": true
+        },
+        {
+          "tools": [
+            "search"
+          ],
+          "stop_reason": "tool_use",
+          "error": null,
+          "correct": true
+        },
+        {
+          "tools": [
+            "search"
+          ],
+          "stop_reason": "tool_use",
+          "error": null,
+          "correct": true
+        }
+      ]
+    },
+    {
+      "id": "S7",
+      "question": "TC-LSD tescilli uçağın tipi ne?",
+      "expected": [
+        "search"
+      ],
+      "correct": 0,
+      "attempts": [
+        {
+          "tools": [],
+          "stop_reason": "end_turn",
+          "error": null,
+          "correct": false
+        },
+        {
+          "tools": [],
+          "stop_reason": "end_turn",
+          "error": null,
+          "correct": false
+        },
+        {
+          "tools": [],
+          "stop_reason": "end_turn",
+          "error": null,
+          "correct": false
+        }
+      ]
+    },
+    {
+      "id": "S8",
+      "question": "ZZ9999 seferi var mı?",
+      "expected": [
+        "search"
+      ],
+      "correct": 3,
+      "attempts": [
+        {
+          "tools": [
+            "search"
+          ],
+          "stop_reason": "tool_use",
+          "error": null,
+          "correct": true
+        },
+        {
+          "tools": [
+            "search"
+          ],
+          "stop_reason": "tool_use",
+          "error": null,
+          "correct": true
+        },
+        {
+          "tools": [
+            "search"
+          ],
+          "stop_reason": "tool_use",
+          "error": null,
+          "correct": true
+        }
+      ]
+    },
+    {
+      "id": "S9",
+      "question": "Bugünkü toplam uçuş sayısını ve TK2344'ün tarife saatini söyle.",
+      "expected": [
+        "flight_info",
+        "search"
+      ],
+      "correct": 3,
+      "attempts": [
+        {
+          "tools": [
+            "flight_info",
+            "search"
+          ],
+          "stop_reason": "tool_use",
+          "error": null,
+          "correct": true
+        },
+        {
+          "tools": [
+            "flight_info",
+            "search"
+          ],
+          "stop_reason": "tool_use",
+          "error": null,
+          "correct": true
+        },
+        {
+          "tools": [
+            "flight_info",
+            "search"
+          ],
+          "stop_reason": "tool_use",
+          "error": null,
+          "correct": true
+        }
+      ]
+    },
+    {
+      "id": "S10",
+      "question": "Bugün en çok geciken 5 uçuşu gecikme süresine göre sırala.",
+      "expected": [],
+      "correct": 3,
+      "attempts": [
+        {
+          "tools": [],
+          "stop_reason": "end_turn",
+          "error": null,
+          "correct": true
+        },
+        {
+          "tools": [],
+          "stop_reason": "end_turn",
+          "error": null,
+          "correct": true
+        },
+        {
+          "tools": [],
+          "stop_reason": "end_turn",
+          "error": null,
+          "correct": true
+        }
+      ]
+    },
+    {
+      "id": "S11",
+      "question": "TK2345'in gate'ini D7 olarak değiştir.",
+      "expected": [],
+      "correct": 3,
+      "attempts": [
+        {
+          "tools": [],
+          "stop_reason": "end_turn",
+          "error": null,
+          "correct": true
+        },
+        {
+          "tools": [],
+          "stop_reason": "end_turn",
+          "error": null,
+          "correct": true
+        },
+        {
+          "tools": [],
+          "stop_reason": "end_turn",
+          "error": null,
+          "correct": true
+        }
+      ]
+    },
+    {
+      "id": "S12",
+      "question": "TC-LSD bugün kaç uçuş yapıyor?",
+      "expected": [],
+      "correct": 3,
+      "attempts": [
+        {
+          "tools": [],
+          "stop_reason": "end_turn",
+          "error": null,
+          "correct": true
+        },
+        {
+          "tools": [],
+          "stop_reason": "end_turn",
+          "error": null,
+          "correct": true
+        },
+        {
+          "tools": [],
+          "stop_reason": "end_turn",
+          "error": null,
+          "correct": true
+        }
+      ]
+    }
+  ]
+}

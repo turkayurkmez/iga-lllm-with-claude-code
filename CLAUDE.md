@@ -15,6 +15,8 @@ AOCC Copilot: havalimanı Operasyon Kontrol Merkezi (AOCC) personeli için Claud
 - `docs/spec.md` §4'teki `COPILOT_MODEL`/`COPILOT_TEMP_MODEL` adları geçersiz; geçerli adlar `ANTHROPIC_*`.
 - `backend/prompts.py`: `SYSTEM_INSTRUCTIONS`, `/chat`'e `system` olarak verilir — canlı veri yokken bunu söyle, sayı/durum uydurma, hesabı servise bırak, kısa ve Türkçe yanıt ver.
 - `scripts/`: tek seferlik deneyler (durumsuzluk, aritmetik, sıcaklık). Doğrudan çalıştırılabilmeleri için repo kökünü `sys.path`'e eklerler.
+- `experiments/function_calling/`: tool kullanım deneyleri. `single_call.py` tek çağrıda blok türlerini, `loop.py` gerçek `get_flight_summary` döngüsünü (sayılar referans veriden, `MAX_TOUR=5`, hatada `is_error`) gösterir. `olc.py <araclar.json> <çıktı.json>` `sorular.json`'daki 12 soruyu 3'er kez sorar (36 ücretli çağrı), tool adı kümesi beklenenle tam eşleşirse doğru sayar; `compare.py` (API'siz) `sonuc_once.json`/`sonuc_sonra.json`'u yan yana koyar. Tool tanımları `araclar_kotu.json`/`araclar_iyi.json`; ölçümler karşılaştırılabilir kalsın diye `sorular.json`'u değiştirme.
+- `data/referans/seed42-2026-10-20.json`: üreteçle (`--seed 42 --date 2026-10-20`) üretilen referans gün verisi; elle düzeltilmez. Özet: 600 uçuş (300/300), 4 iptal, 115 gecikmeli. `data/` `.gitignore`'da değil.
 - `docs/sorumluluk-zinciri.md`: deney bulgularından hangi işin LLM'e, hangisinin servise ait olduğuna dair GÖZLEM/KARAR tablosu.
 - `docs/superpowers/specs/`: ilk teknoloji kararları. uv/`pyproject.toml` ve Python 3.12 kararları geçerliliğini yitirdi; ortam pip + `.venv` + Python 3.13.
 - `.claude/hooks/prompt-gate.ps1` + `.claude/skills/prompt-netlestir/`: görev prompt'larını işe başlamadan önce Amaç/Bağlam/Veri/Kısıt/Format'a göre netleştirir. Hook slash komutlarını ve onay kalıplarını atlar; `/prompt-netlestir` kontrolü elle zorlar. Betik UTF-8 BOM ile kaydedilmeli (PowerShell 5.1 BOM'suz dosyayı ANSI okur).
@@ -44,7 +46,7 @@ $env:PYTHONIOENCODING="utf-8"; .\.venv\Scripts\python.exe scripts\first_call.py
 .\.venv\Scripts\python.exe scripts\temperature.py --model <model-adı>
 
 # Lint / format
-.\.venv\Scripts\python.exe -m ruff check backend scripts synth tests; .\.venv\Scripts\python.exe -m ruff format backend scripts synth tests
+.\.venv\Scripts\python.exe -m ruff check backend scripts synth tests experiments; .\.venv\Scripts\python.exe -m ruff format backend scripts synth tests experiments
 
 # Sentetik veri (çıktı synth/out/, git'e girmez)
 $env:PYTHONIOENCODING="utf-8"; .\.venv\Scripts\python.exe -m synth.generator --seed 42 --date 2026-10-20 --out synth\out\2026-10-20.json
@@ -68,6 +70,7 @@ try { <for döngüsüyle /health yokla; istekleri at> } finally { Stop-Process -
 
 - Tanımlayıcılar İngilizce; yorumlar, docstring'ler, kullanıcıya dönen mesajlar ve birim test isimleri Türkçe.
 - Model adı her zaman `backend.llm.MODEL` / `TEMP_MODEL`'den alınır.
+- Tool tanımlarında açıklama "ne döndürür / ne zaman kullanılır / ne zaman KULLANILMAZ" içerir, enum ve örnek değer verilir; belirsiz açıklamada model birden fazla tool'u birlikte çağırıyor.
 - Yanıttan metin alırken yalnızca `block.type == "text"` blokları birleştirilir; içerikte thinking blokları da olabilir.
 - `max_tokens` varsayılanı 16000; thinking de çıktı token'ı harcar.
 - Sıcaklık gerekiyorsa `extra_body={"temperature": ...}` ile gönderilir (SDK 1.x parametreyi kaldırdı). Güncel modeller (ör. `claude-sonnet-5-5`) varsayılan dışı sıcaklığı 400 ile reddeder.
