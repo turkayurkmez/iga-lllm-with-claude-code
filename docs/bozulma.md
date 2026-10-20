@@ -44,3 +44,52 @@ python -m synth.corruption --in girdi.json --scenario S --out çıktı.json [--f
 - Bozulma yalnızca tabloda "Neyi bozar" sütununda yazanı değiştirir. Çıktı ile girdi arasındaki fark, eval'in beklediği farkın tamamıdır; başka hiçbir alan, kayıt ya da sıra değişmez.
 - Agent davranışları `backend/prompts.py`'deki ilkeye dayanır: doğrulanmış veri yoksa bunu söyler, sayı/durum uydurmaz, hesabı servise bırakır.
 - Kod `synth/corruption.py`'de yazılacak. Testleri, `tests/test_generator.py` gibi koddan önce yazılır ve gevşetilmez.
+
+## Akış
+
+`synth.stream`, bir üreteç ya da bozulma çıktısındaki `positions` kayıtlarını simüle zamanla stdout'a akıtır. Amaç, agent'ı ve arayüzü canlı veri gelir gibi beslemektir. Bu bölüm yalnızca sözleşmedir; kod ve testler ayrı işte yazılır.
+
+### Komut
+
+```
+python -m synth.stream --in girdi.json --from HH:MM [--speed 60] [--no-wait]
+```
+
+| Argüman | Zorunlu | Açıklama |
+|---|---|---|
+| `--in` | evet | `synth.generator` ya da `synth.corruption` çıktısı. Yalnızca okunur. |
+| `--from` | evet | Simüle saatin başlangıcı, `HH:MM` (00:00–23:59). Gün girdinin `meta.date` alanından gelir, saat dilimi `+03:00`'tür. |
+| `--speed` | hayır | Gerçek bir saniyede geçen simüle saniye sayısı; varsayılan `60` (gerçek 1 sn = simüle 1 dk). `0`'dan büyük bir sayı olmalı. |
+| `--no-wait` | hayır | Hiç beklemeden tüm satırları hemen yazar. |
+
+### Çıktı
+
+- stdout'a **NDJSON** yazılır: her satır tek bir konum kaydıdır. Kayıt girdideki haliyle, alan sırası korunarak `json.dumps(kayıt, ensure_ascii=False)` ile yazılır; satır sonu `\n`'dir. stdout'ta konum satırları dışında hiçbir şey yoktur.
+- **Seçim:** `ts`'si `--from`'dan önce olan kayıtlar atlanır; `ts == from` olanlar yayınlanır. Akış son kayıtla biter.
+- **Sıra:** `(ts, flight_id)`, artan. `ts` metin olarak değil, zaman damgası olarak karşılaştırılır.
+- Bitişte stderr'e tek satır özet yazılır: yayınlanan satır sayısı, ilk ve son `ts`. `--from`'dan sonra hiç kayıt yoksa bu hata değildir: stdout boş kalır, özette sayı `0` olur ve komut `0` koduyla çıkar.
+
+### Belirlenimcilik ve bekleme
+
+- stdout'taki çıktı **yalnızca girdiden ve `--from`'dan** türer. Aynı girdi ve aynı `--from` ile çıktı, `--speed` ve `--no-wait` ne olursa olsun byte byte aynıdır. Sistem saati ve rastgelelik çıktıyı etkilemez.
+- Bekleme yalnızca satırların **ne zaman** yazıldığını belirler, neyin yazıldığını değil. Aynı `ts`'ye sahip satırlar tek grup olarak birlikte yazılır ve her gruptan sonra stdout boşaltılır (`flush`).
+- Grup *i*'nin yazılma anı: başlangıç + (`ts_i − from`) / `speed` gerçek saniye. Süre her grup için başlangıçtan hesaplanır; bekleme süreleri art arda toplanmadığı için zaman kayması birikmez. İlk grup da `--from`'dan itibaren bekler.
+- `--no-wait` verildiğinde hiç beklenmez; çıktı yine aynıdır.
+
+### Bozulmuş girdiyle davranış
+
+`synth.stream` referans bütünlüğünü denetlemez ve kayıtları düzeltmez; girdide ne varsa onu akıtır:
+
+- `stale_position` çıktısında hedefin izi 10 dakika erken biter.
+- `undefined_flight` çıktısındaki yetim konumlar da akıtılır.
+
+Bozulmayı fark etmek tüketicinin, yani agent'ın işidir (bkz. Senaryolar tablosu).
+
+### Hata durumları
+
+Aşağıdaki durumlarda komut sıfırdan farklı bir kodla çıkar, stderr'e Türkçe neden yazar ve **stdout'a hiç satır yazmaz**. Doğrulama, ilk satır yazılmadan önce yapılır:
+
+- `--in` okunamıyor ya da geçerli JSON değil.
+- `meta.date` yok ya da `YYYY-MM-DD` biçiminde değil.
+- `--from` `HH:MM` biçiminde değil ya da 00:00–23:59 dışında.
+- `--speed` sayı değil ya da `0`'dan büyük değil.
