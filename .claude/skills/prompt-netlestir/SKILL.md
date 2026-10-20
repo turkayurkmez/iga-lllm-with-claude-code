@@ -30,7 +30,8 @@ skill'i uygulama; konuşmaya devam et. Elle çağrıldıysa (`/prompt-netlestir`
 2. Bir alan "eksik sayılır" sütununa düşüyorsa çalışmaya başlamadan önce yalnızca eksik alanları
    sor.
 3. Cevaplardan sonra 5 alanlık özeti göster ve onay bekle. Onaydan önce dosya değiştirme, komut
-   çalıştırma. Değerlendirme için dosya okumak ve salt okunur komutlar serbesttir.
+   çalıştırma. Değerlendirme için yalnızca dosya okuma/arama ve `git log`, `git status`,
+   `git diff`, `git show` serbesttir; script, test ya da API çağrısı yapan hiçbir komut değil.
 4. "Repodan çıkarılabilir", "tahmin edilebilir" anlamına gelmez. Bir değeri dosyada ya da komut
    çıktısında doğrudan göremiyorsan o alan eksiktir.
 

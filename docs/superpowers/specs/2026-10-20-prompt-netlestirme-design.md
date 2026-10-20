@@ -56,7 +56,9 @@ gösterir) ve sorması gereken bilgi.
    alanları sorar. Sorular `AskUserQuestion` ile, mümkünse seçenekli olarak gelir ve tek turda en
    fazla 4 soru sorulur.
 3. Cevaplardan sonra Claude 5 alanlık özeti gösterir ve onay bekler. Onaydan önce dosya
-   değiştirmez, komut çalıştırmaz.
+   değiştirmez, komut çalıştırmaz. İstisna: değerlendirme için dosya okuma/arama ve `git log`,
+   `git status`, `git diff`, `git show`; script, test ya da API çağrısı yapan komutlar bu istisnaya
+   girmez.
 4. "Repodan çıkarılabilir", "tahmin edilebilir" anlamına gelmez. Claude bir değeri dosyada ya
    da komut çıktısında doğrudan göremiyorsa o alan eksik sayılır.
 
