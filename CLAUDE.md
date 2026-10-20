@@ -11,6 +11,7 @@ AOCC Copilot: havalimanı Operasyon Kontrol Merkezi (AOCC) personeli için Claud
 - `docker-compose.yml` + `backend/Dockerfile`: backend `db` sağlıklı olunca başlar ama veritabanına bağlanmaz. `.env` imaja girmez, `env_file` ile verilir; `db` yalnızca `POSTGRES_PASSWORD`'ü alır.
 - `db/schema.sql`: spec §6 sözleşmesi; alan adları birebir korunur. Şema yalnızca **boş volume'da** yüklenir: şemayı değiştirdikten sonra `docker compose down -v` gerekir ve bu veritabanını sıfırlar (bilinçli davranış).
 - `synth/generator.py`: `python -m synth.generator --seed N --date YYYY-MM-DD --out dosya.json`. Belirlenimci: rastgelelik yalnızca `random.Random(seed)`'den; sistem saati, `set` sırası ve `hash()` kullanılmaz; çıktı `newline="\n"` ile yazılır. §9 sabit kayıtları (`TC-LSD`, `TK2344`/`TK2345`) her seed/tarihte aynıdır. Sözleşme `tests/test_generator.py`'dedir.
+- `synth/corruption.py` / `synth/stream.py`: sözleşme `docs/bozulma.md`'de. corruption üreteç çıktısını tek senaryoyla bozar (hata durumunda çıktı yazılmaz); stream `positions`'ı simüle zamanla stdout'a NDJSON olarak akıtır (özet ve hatalar stderr'de). Testleri `tests/test_corruption.py`, `tests/test_stream.py`.
 - `docs/spec.md` §4'teki `COPILOT_MODEL`/`COPILOT_TEMP_MODEL` adları geçersiz; geçerli adlar `ANTHROPIC_*`.
 - `backend/prompts.py`: `SYSTEM_INSTRUCTIONS`, `/chat`'e `system` olarak verilir — canlı veri yokken bunu söyle, sayı/durum uydurma, hesabı servise bırak, kısa ve Türkçe yanıt ver.
 - `scripts/`: tek seferlik deneyler (durumsuzluk, aritmetik, sıcaklık). Doğrudan çalıştırılabilmeleri için repo kökünü `sys.path`'e eklerler.
@@ -48,7 +49,11 @@ $env:PYTHONIOENCODING="utf-8"; .\.venv\Scripts\python.exe scripts\first_call.py
 # Sentetik veri (çıktı synth/out/, git'e girmez)
 $env:PYTHONIOENCODING="utf-8"; .\.venv\Scripts\python.exe -m synth.generator --seed 42 --date 2026-10-20 --out synth\out\2026-10-20.json
 
-# Yalnızca üreteç testleri (~15 sn; tüm paket ~80–115 sn)
+.\.venv\Scripts\python.exe -m synth.corruption --in synth\out\2026-10-20.json --scenario stale_position --out synth\out\stale.json
+.\.venv\Scripts\python.exe -m synth.stream --in synth\out\2026-10-20.json --from 16:00 [--speed 600] [--no-wait]
+git -c core.autocrlf=false diff --no-index --stat synth\out\2026-10-20.json synth\out\stale.json   # bozulma farkı
+
+# Yalnızca üreteç testleri (~15 sn; tüm paket ~160 sn)
 .\.venv\Scripts\python.exe -m pytest tests\test_generator.py
 
 # Uçtan uca sunucu testi: arka planda başlat, /health'i yokla, try/finally ile kapat
@@ -75,7 +80,9 @@ try { <for döngüsüyle /health yokla; istekleri at> } finally { Stop-Process -
 - Bağımlılıklar `requirements.txt`'te `==` ile sabitlenir.
 - Ruff satır sınırı 88; PLW1510 (`subprocess.run`'a `check=` ver) ve RUF007 (`zip(x, x[1:])` yerine `itertools.pairwise`) açık.
 - Test dosyaları `test_*.py` adını taşır; pytest başka adları toplamaz.
-- `tests/test_generator.py` gevşetilmez (spec §10); kırmızıysa üreteç düzeltilir.
+- `tests/test_generator.py`, `test_corruption.py`, `test_stream.py` gevşetilmez; kırmızıysa kod düzeltilir. Sözleşme testleri koddan önce yazılır; hata testleri modülün var olduğunu da denetler (`importlib.util.find_spec`), yoksa modül eksikken de yeşil kalırlar.
+- `synth` CLI'ları: hatada stderr'e `Hata: ...` yazar, 1 ile çıkar, çıktı (dosya/stdout) üretmez; tüm doğrulama ilk yazımdan önce yapılır.
+- PowerShell 5.1'de `>` stdout'u UTF-16'ya çevirir; byte'ları birebir dosyaya almak için `cmd /c "... > dosya"` kullan.
 - Yeni deney bulguları `docs/sorumluluk-zinciri.md` tablosuna işlenir.
 - Komutlar `&&` değil `;` ile zincirlenir.
 - Konsola Türkçe yazan script'ler `PYTHONIOENCODING=utf-8` ile çalıştırılır.
