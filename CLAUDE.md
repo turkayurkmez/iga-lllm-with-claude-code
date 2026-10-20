@@ -15,8 +15,10 @@ AOCC Copilot: havalimanı Operasyon Kontrol Merkezi (AOCC) personeli için Claud
 - `docs/spec.md` §4'teki `COPILOT_MODEL`/`COPILOT_TEMP_MODEL` adları geçersiz; geçerli adlar `ANTHROPIC_*`.
 - `backend/prompts.py`: `SYSTEM_INSTRUCTIONS`, `/chat`'e `system` olarak verilir — canlı veri yokken bunu söyle, sayı/durum uydurma, hesabı servise bırak, kısa ve Türkçe yanıt ver.
 - `scripts/`: tek seferlik deneyler (durumsuzluk, aritmetik, sıcaklık). Doğrudan çalıştırılabilmeleri için repo kökünü `sys.path`'e eklerler.
-- `experiments/function_calling/`: tool kullanım deneyleri. `single_call.py` tek çağrıda blok türlerini, `loop.py` gerçek `get_flight_summary` döngüsünü (sayılar referans veriden, `MAX_TOUR=5`, hatada `is_error`) gösterir. `olc.py <araclar.json> <çıktı.json>` `sorular.json`'daki 12 soruyu 3'er kez sorar (36 ücretli çağrı), tool adı kümesi beklenenle tam eşleşirse doğru sayar; `compare.py` (API'siz) `sonuc_once.json`/`sonuc_sonra.json`'u yan yana koyar. Tool tanımları `araclar_kotu.json`/`araclar_iyi.json`; ölçümler karşılaştırılabilir kalsın diye `sorular.json`'u değiştirme.
+- `experiments/function_calling/`: tool kullanım deneyleri. `single_call.py` tek çağrıda blok türlerini, `loop.py` gerçek `get_flight_summary` döngüsünü (sayılar referans veriden, `MAX_TOUR=5`, hatada `is_error`) gösterir. `loop_envelope.py [--soru ..] [--veri ..]` aynı döngüyü `araclar_iyi.json`'daki `flight_info`/`search` ile kurar; her sonuç `backend.envelope.call_tool` ile zarflanır, modele zarfın tamamı JSON gider, `is_error` yalnızca `SCHEMA_VALIDATION_FAILED`'da true; sonda "Cevap:" ve "Zarflar:" blokları basılır. Argüman modelleri `araclar_iyi.json`'la başlangıçta karşılaştırılır; JSON değişirse modeller de güncellenmeli. `olc.py <araclar.json> <çıktı.json>` `sorular.json`'daki 12 soruyu 3'er kez sorar (36 ücretli çağrı), tool adı kümesi beklenenle tam eşleşirse doğru sayar; `compare.py` (API'siz) `sonuc_once.json`/`sonuc_sonra.json`'u yan yana koyar. Tool tanımları `araclar_kotu.json`/`araclar_iyi.json`; ölçümler karşılaştırılabilir kalsın diye `sorular.json`'u değiştirme.
 - `data/referans/seed42-2026-10-20.json`: üreteçle (`--seed 42 --date 2026-10-20`) üretilen referans gün verisi; elle düzeltilmez. Özet: 600 uçuş (300/300), 4 iptal, 115 gecikmeli. `data/` `.gitignore`'da değil.
+- `docs/zarf.md`: tool çıktılarının ortak zarfı (8 sabit alan, 5 hata kodu, eksik alan hata değildir). Yeni tool bu sözleşmeye uyar. `backend/envelope.py` › `call_tool(registry, name, args)` zarfı kurar: tool yalnızca `{value, source, data_time?, error?}` döner, `as_of`/`stale`'i katman hesaplar (tool gönderirse yok sayılır), `ToolSpec.max_age` aşılırsa `STALE_DATA` (author=layer). Sözleşme `tests/test_envelope.py`'de; testler `zarf.md`'deki JSON örneklerini birebir karşılaştırır, örnek değişirse kod da değişmeli. Zarf `Envelope` pydantic modelinden kurulur; `docs/zarf.schema.json` bu modelden `python -m backend.envelope` ile üretilir, elle düzeltilmez (model değişince yeniden üret, yoksa test kırmızı).
+- `backend/clock.py` › `now()`: `backend/` altında sistem saatinin okunduğu tek yer (`tests/test_clock.py` tarar). `COPILOT_NOW` doluysa sabit an (saat dilimi zorunlu, yoksa `ClockError`), boşsa sistem saati `+03:00`. Testler saati `monkeypatch.setenv("COPILOT_NOW", ...)` ile sabitler.
 - `docs/sorumluluk-zinciri.md`: deney bulgularından hangi işin LLM'e, hangisinin servise ait olduğuna dair GÖZLEM/KARAR tablosu.
 - `docs/superpowers/specs/`: ilk teknoloji kararları. uv/`pyproject.toml` ve Python 3.12 kararları geçerliliğini yitirdi; ortam pip + `.venv` + Python 3.13.
 - `.claude/hooks/prompt-gate.ps1` + `.claude/skills/prompt-netlestir/`: görev prompt'larını işe başlamadan önce Amaç/Bağlam/Veri/Kısıt/Format'a göre netleştirir. Hook slash komutlarını ve onay kalıplarını atlar; `/prompt-netlestir` kontrolü elle zorlar. Betik UTF-8 BOM ile kaydedilmeli (PowerShell 5.1 BOM'suz dosyayı ANSI okur).
@@ -55,7 +57,7 @@ $env:PYTHONIOENCODING="utf-8"; .\.venv\Scripts\python.exe -m synth.generator --s
 .\.venv\Scripts\python.exe -m synth.stream --in synth\out\2026-10-20.json --from 16:00 [--speed 600] [--no-wait]
 git -c core.autocrlf=false diff --no-index --stat synth\out\2026-10-20.json synth\out\stale.json   # bozulma farkı
 
-# Yalnızca üreteç testleri (~15 sn; tüm paket ~160 sn)
+# Yalnızca üreteç testleri (~15 sn; tüm paket ~190 sn, timeout'u ≥300 sn ver)
 .\.venv\Scripts\python.exe -m pytest tests\test_generator.py
 
 # Uçtan uca sunucu testi: arka planda başlat, /health'i yokla, try/finally ile kapat
@@ -81,7 +83,7 @@ try { <for döngüsüyle /health yokla; istekleri at> } finally { Stop-Process -
 - Geçmişe asistan turu eklerken `response.content`'i olduğu gibi geri gönder; yalnızca metni değil, thinking bloklarını da.
 - `sys.path.insert` sonrasındaki importlara `# noqa: E402` ekleme; E402 kapalı, ruff RUF100 hatası verir.
 - Bağımlılıklar `requirements.txt`'te `==` ile sabitlenir.
-- Ruff satır sınırı 88; PLW1510 (`subprocess.run`'a `check=` ver) ve RUF007 (`zip(x, x[1:])` yerine `itertools.pairwise`) açık.
+- Ruff satır sınırı 88; PLW1510 (`subprocess.run`'a `check=` ver), RUF007 (`zip(x, x[1:])` yerine `itertools.pairwise`), FURB167 (`re.S` değil `re.DOTALL`) ve TRY004 (`isinstance` denetiminde `TypeError` fırlat) açık.
 - Test dosyaları `test_*.py` adını taşır; pytest başka adları toplamaz.
 - `tests/test_generator.py`, `test_corruption.py`, `test_stream.py` gevşetilmez; kırmızıysa kod düzeltilir. Sözleşme testleri koddan önce yazılır; hata testleri modülün var olduğunu da denetler (`importlib.util.find_spec`), yoksa modül eksikken de yeşil kalırlar.
 - `synth` CLI'ları: hatada stderr'e `Hata: ...` yazar, 1 ile çıkar, çıktı (dosya/stdout) üretmez; tüm doğrulama ilk yazımdan önce yapılır.
@@ -89,6 +91,8 @@ try { <for döngüsüyle /health yokla; istekleri at> } finally { Stop-Process -
 - Yeni deney bulguları `docs/sorumluluk-zinciri.md` tablosuna işlenir.
 - Komutlar `&&` değil `;` ile zincirlenir.
 - Konsola Türkçe yazan script'ler `PYTHONIOENCODING=utf-8` ile çalıştırılır.
+- Bash aracında Türkçe çıktı süzülecekse `PYTHONIOENCODING=utf-8 ... | grep -a` kullan; `$` içeren `python -c` tek satırlıklarını PowerShell yerine Bash'te çalıştır.
+- Kaynak kodu Write/Edit ile yaz; Python kodunu başka bir Python string'i ya da heredoc içinden üretme (kaçış dizileri, ör. `"\n"`, gerçek karaktere dönüşür).
 - Commit mesajları kilometre taşı önekiyle yazılır, ör. `M1.1 - 04 durumsuzluk deneyi`.
 
 ## Yasaklar

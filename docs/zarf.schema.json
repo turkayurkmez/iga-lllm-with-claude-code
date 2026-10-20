@@ -1,0 +1,121 @@
+{
+  "$defs": {
+    "EnvelopeError": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "$ref": "#/$defs/ErrorCode"
+        },
+        "message": {
+          "description": "Kısa, genel Türkçe açıklama; iç ayrıntı içermez.",
+          "title": "Message",
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ],
+      "title": "EnvelopeError",
+      "type": "object"
+    },
+    "ErrorCode": {
+      "enum": [
+        "NOT_FOUND",
+        "AMBIGUOUS_ENTITY",
+        "STALE_DATA",
+        "CAPABILITY_NOT_IN_SCOPE",
+        "SCHEMA_VALIDATION_FAILED"
+      ],
+      "title": "ErrorCode",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Her tool çıktısının ortak zarfı; sekiz alan da zorunludur (docs/zarf.md).",
+  "properties": {
+    "value": {
+      "description": "Tool'un döndürdüğü veri; katman hatasında null.",
+      "title": "Value"
+    },
+    "source": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "Verinin kaynağı; katman hatasında null.",
+      "title": "Source"
+    },
+    "as_of": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "Verinin ait olduğu an, +03:00; katman hesaplar.",
+      "title": "As Of"
+    },
+    "filters": {
+      "additionalProperties": true,
+      "description": "Doğrulanmış tool argümanları.",
+      "title": "Filters",
+      "type": "object"
+    },
+    "stale": {
+      "description": "true ise error.code STALE_DATA'dır.",
+      "title": "Stale",
+      "type": "boolean"
+    },
+    "tool_version": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "Tool sürümü, MAJOR.MINOR.PATCH.",
+      "title": "Tool Version"
+    },
+    "error": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/EnvelopeError"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "author": {
+      "description": "Zarfı kimin yazdığı.",
+      "enum": [
+        "tool",
+        "layer"
+      ],
+      "title": "Author",
+      "type": "string"
+    }
+  },
+  "required": [
+    "value",
+    "source",
+    "as_of",
+    "filters",
+    "stale",
+    "tool_version",
+    "error",
+    "author"
+  ],
+  "title": "Envelope",
+  "type": "object"
+}
