@@ -3,16 +3,17 @@
 Repo kökünden çalıştırın: uvicorn backend.main:app --reload
 """
 
+import importlib
 import json
 import logging
 from collections.abc import AsyncIterator
+from types import ModuleType
 
 import anthropic
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, field_validator
 
-from backend.llm import MODEL, async_client
 from backend.prompts import SYSTEM_INSTRUCTIONS
 
 logging.basicConfig(level=logging.INFO)
@@ -22,8 +23,20 @@ MAX_TOKENS = 16000
 
 # İstemciye yalnızca bu genel mesaj gider; hatanın ayrıntısı sunucu loguna yazılır.
 ERROR_MESSAGE = "Yanıt üretilirken bir hata oluştu. Lütfen daha sonra tekrar deneyin."
+CONFIG_ERROR_MESSAGE = (
+    "Sohbet servisi şu anda yapılandırılmamış. Lütfen yöneticinize başvurun."
+)
 
 app = FastAPI(title="AOCC Copilot")
+
+
+def load_llm() -> ModuleType:
+    """backend.llm'i ilk /chat isteğinde yükler; /health API anahtarı olmadan çalışsın diye.
+
+    Başarısız import sys.modules'e girmez, yani her çağrı ayarları yeniden dener.
+    """
+    # importlib: `from backend import llm` paket özniteliğinde kalan eski modülü döndürebilir.
+    return importlib.import_module("backend.llm")
 
 
 class ChatRequest(BaseModel):
@@ -44,11 +57,11 @@ def sse_event(event: str, data: dict) -> str:
     return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
 
 
-async def stream_reply(message: str) -> AsyncIterator[str]:
+async def stream_reply(llm: ModuleType, message: str) -> AsyncIterator[str]:
     """Model yanıtını SSE olayları olarak üretir: delta*, ardından done ya da error."""
     try:
-        async with async_client.messages.stream(
-            model=MODEL,
+        async with llm.async_client.messages.stream(
+            model=llm.MODEL,
             max_tokens=MAX_TOKENS,
             system=SYSTEM_INSTRUCTIONS,
             messages=[{"role": "user", "content": message}],
@@ -71,9 +84,16 @@ async def health() -> dict:
 
 @app.post("/chat")
 async def chat(request: ChatRequest) -> StreamingResponse:
+    # ConfigError, backend.llm import edilemeden yakalanamaz; RuntimeError onun taban sınıfıdır.
+    try:
+        llm = load_llm()
+    except RuntimeError:
+        logger.exception("LLM ayarları yüklenemedi")
+        raise HTTPException(status_code=503, detail=CONFIG_ERROR_MESSAGE) from None
+
     # text/event-stream için Starlette charset=utf-8'i başlığa kendisi ekler.
     return StreamingResponse(
-        stream_reply(request.message),
+        stream_reply(llm, request.message),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache"},
     )

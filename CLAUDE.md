@@ -4,10 +4,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Proje özeti
 
-AOCC Copilot: havalimanı Operasyon Kontrol Merkezi (AOCC) personeli için Claude tabanlı asistan. Hedef, canlı operasyon verisini (uçuş, gate/stand, kaynak, olay) tool'larla sorgulayıp özetlemek; şu an canlı veri bağlantısı yok. Python 3.13 + FastAPI backend, Anthropic Python SDK 1.x'e doğrudan API key ile bağlanır. React frontend ve PostgreSQL (mock veri) planlandı, henüz yok.
+AOCC Copilot: havalimanı Operasyon Kontrol Merkezi (AOCC) personeli için Claude tabanlı asistan. Hedef, canlı operasyon verisini (uçuş, gate/stand, kaynak, olay) tool'larla sorgulayıp özetlemek; şu an canlı veri bağlantısı yok. Python 3.13 + FastAPI backend, Anthropic Python SDK 1.x'e doğrudan API key ile bağlanır. Gün 1 iskelesi `docs/spec.md`'ye göre kuruluyor: docker compose (`db` Postgres 17 + `backend`), `db/schema.sql`, `synth/` sentetik veri üreteci. React frontend henüz yok (`frontend/` yer tutucu).
 
-- `backend/llm.py`: tek config ve istemci noktası. `.env`'yi import anında yükler; `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL`, `ANTHROPIC_TEMP_MODEL` eksik/boşsa Türkçe `ConfigError` fırlatır, yani bu modülü import eden her şey geçerli bir `.env` ister. Ortamdaki değişkenler `.env`'nin önüne geçer. `client` (senkron) script'ler, `async_client` FastAPI içindir.
-- `backend/main.py`: `GET /health`, `POST /chat` (`{"message": "..."}`; boş/boşluk mesaj 422). `/chat` yanıtı SSE akışıdır: `delta` (metin parçası) olayları, ardından `done` (`stop_reason`) ya da `error`.
+- `backend/llm.py`: tek config ve istemci noktası. `.env`'yi import anında yükler (`scripts/` modül düzeyinde `client` import ettiği için böyle kalmalı); `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL`, `ANTHROPIC_TEMP_MODEL` eksik/boşsa Türkçe `ConfigError` fırlatır, yani bu modülü import eden her şey geçerli bir `.env` ister. Ortamdaki değişkenler `.env`'nin önüne geçer. `client` (senkron) script'ler, `async_client` FastAPI içindir.
+- `backend/main.py`: `GET /health`, `POST /chat` (`{"message": "..."}`; boş/boşluk mesaj 422). `backend.llm`'i modül düzeyinde import etmez, ilk `/chat`'te `load_llm()` ile yükler; böylece `/health` API anahtarı olmadan çalışır, ayar eksikse `/chat` 503 + genel mesaj döner. `/chat` yanıtı SSE akışıdır: `delta` (metin parçası) olayları, ardından `done` (`stop_reason`) ya da `error`.
+- `docker-compose.yml` + `backend/Dockerfile`: backend `db` sağlıklı olunca başlar ama veritabanına bağlanmaz. `.env` imaja girmez, `env_file` ile verilir; `db` yalnızca `POSTGRES_PASSWORD`'ü alır.
+- `db/schema.sql`: spec §6 sözleşmesi; alan adları birebir korunur. Şema yalnızca **boş volume'da** yüklenir: şemayı değiştirdikten sonra `docker compose down -v` gerekir ve bu veritabanını sıfırlar (bilinçli davranış).
+- `synth/generator.py`: `python -m synth.generator --seed N --date YYYY-MM-DD --out dosya.json`. Belirlenimci: rastgelelik yalnızca `random.Random(seed)`'den; sistem saati, `set` sırası ve `hash()` kullanılmaz; çıktı `newline="\n"` ile yazılır. §9 sabit kayıtları (`TC-LSD`, `TK2344`/`TK2345`) her seed/tarihte aynıdır. Sözleşme `tests/test_generator.py`'dedir.
+- `docs/spec.md` §4'teki `COPILOT_MODEL`/`COPILOT_TEMP_MODEL` adları geçersiz; geçerli adlar `ANTHROPIC_*`.
 - `backend/prompts.py`: `SYSTEM_INSTRUCTIONS`, `/chat`'e `system` olarak verilir — canlı veri yokken bunu söyle, sayı/durum uydurma, hesabı servise bırak, kısa ve Türkçe yanıt ver.
 - `scripts/`: tek seferlik deneyler (durumsuzluk, aritmetik, sıcaklık). Doğrudan çalıştırılabilmeleri için repo kökünü `sys.path`'e eklerler.
 - `docs/sorumluluk-zinciri.md`: deney bulgularından hangi işin LLM'e, hangisinin servise ait olduğuna dair GÖZLEM/KARAR tablosu.
@@ -29,12 +33,23 @@ py -3.13 -m venv .venv; .\.venv\Scripts\python.exe -m pip install -r requirement
 curl.exe -s http://127.0.0.1:8000/health
 curl.exe -N -X POST http://127.0.0.1:8000/chat -H "Content-Type: application/json" --data-binary "@istek1.json"
 
+# Docker (db + backend); şema yüklenmesi için volume boş olmalı
+docker compose up --build
+docker compose exec db psql -U copilot -d copilot -c "\dt"
+docker compose down -v   # veritabanını sıfırlar
+
 # Deney script'leri
 $env:PYTHONIOENCODING="utf-8"; .\.venv\Scripts\python.exe scripts\first_call.py
 .\.venv\Scripts\python.exe scripts\temperature.py --model <model-adı>
 
 # Lint / format
-.\.venv\Scripts\python.exe -m ruff check backend scripts tests; .\.venv\Scripts\python.exe -m ruff format backend scripts tests
+.\.venv\Scripts\python.exe -m ruff check backend scripts synth tests; .\.venv\Scripts\python.exe -m ruff format backend scripts synth tests
+
+# Sentetik veri (çıktı synth/out/, git'e girmez)
+$env:PYTHONIOENCODING="utf-8"; .\.venv\Scripts\python.exe -m synth.generator --seed 42 --date 2026-10-20 --out synth\out\2026-10-20.json
+
+# Yalnızca üreteç testleri (~15 sn; tüm paket ~80–115 sn)
+.\.venv\Scripts\python.exe -m pytest tests\test_generator.py
 
 # Uçtan uca sunucu testi: arka planda başlat, /health'i yokla, try/finally ile kapat
 $p = Start-Process .\.venv\Scripts\python.exe -ArgumentList "-m uvicorn backend.main:app --port 8765" -PassThru -WindowStyle Hidden
@@ -58,6 +73,9 @@ try { <for döngüsüyle /health yokla; istekleri at> } finally { Stop-Process -
 - Geçmişe asistan turu eklerken `response.content`'i olduğu gibi geri gönder; yalnızca metni değil, thinking bloklarını da.
 - `sys.path.insert` sonrasındaki importlara `# noqa: E402` ekleme; E402 kapalı, ruff RUF100 hatası verir.
 - Bağımlılıklar `requirements.txt`'te `==` ile sabitlenir.
+- Ruff satır sınırı 88; PLW1510 (`subprocess.run`'a `check=` ver) ve RUF007 (`zip(x, x[1:])` yerine `itertools.pairwise`) açık.
+- Test dosyaları `test_*.py` adını taşır; pytest başka adları toplamaz.
+- `tests/test_generator.py` gevşetilmez (spec §10); kırmızıysa üreteç düzeltilir.
 - Yeni deney bulguları `docs/sorumluluk-zinciri.md` tablosuna işlenir.
 - Komutlar `&&` değil `;` ile zincirlenir.
 - Konsola Türkçe yazan script'ler `PYTHONIOENCODING=utf-8` ile çalıştırılır.

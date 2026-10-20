@@ -45,6 +45,10 @@ desktop.ini
 
 # ───────── Deneme istekleri ─────────
 *istek*.json
+istek*.json
+
+# ───────── Sentetik veri çıktısı ─────────
+synth/out/
 
 # ───────── Loglar ─────────
 *.log

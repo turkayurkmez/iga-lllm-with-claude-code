@@ -1,0 +1,6 @@
+.env
+.venv
+.git
+synth/out
+__pycache__
+istek*.json
