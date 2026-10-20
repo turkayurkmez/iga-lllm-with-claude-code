@@ -12,6 +12,7 @@ AOCC Copilot: havalimanı Operasyon Kontrol Merkezi (AOCC) personeli için Claud
 - `scripts/`: tek seferlik deneyler (durumsuzluk, aritmetik, sıcaklık). Doğrudan çalıştırılabilmeleri için repo kökünü `sys.path`'e eklerler.
 - `docs/sorumluluk-zinciri.md`: deney bulgularından hangi işin LLM'e, hangisinin servise ait olduğuna dair GÖZLEM/KARAR tablosu.
 - `docs/superpowers/specs/`: ilk teknoloji kararları. uv/`pyproject.toml` ve Python 3.12 kararları geçerliliğini yitirdi; ortam pip + `.venv` + Python 3.13.
+- `.claude/hooks/prompt-gate.ps1` + `.claude/skills/prompt-netlestir/`: görev prompt'larını işe başlamadan önce Amaç/Bağlam/Veri/Kısıt/Format'a göre netleştirir. Hook slash komutlarını ve onay kalıplarını atlar; `/prompt-netlestir` kontrolü elle zorlar. Betik UTF-8 BOM ile kaydedilmeli (PowerShell 5.1 BOM'suz dosyayı ANSI okur).
 
 ## Komutlar
 
@@ -33,14 +34,14 @@ $env:PYTHONIOENCODING="utf-8"; .\.venv\Scripts\python.exe scripts\first_call.py
 .\.venv\Scripts\python.exe scripts\temperature.py --model <model-adı>
 
 # Lint / format
-.\.venv\Scripts\python.exe -m ruff check backend scripts; .\.venv\Scripts\python.exe -m ruff format backend scripts
+.\.venv\Scripts\python.exe -m ruff check backend scripts tests; .\.venv\Scripts\python.exe -m ruff format backend scripts tests
 
 # Uçtan uca sunucu testi: arka planda başlat, /health'i yokla, try/finally ile kapat
 $p = Start-Process .\.venv\Scripts\python.exe -ArgumentList "-m uvicorn backend.main:app --port 8765" -PassThru -WindowStyle Hidden
 try { <for döngüsüyle /health yokla; istekleri at> } finally { Stop-Process -Id $p.Id -Force }
 
-# Testler (henüz test yok; tek test örneği)
-.\.venv\Scripts\python.exe -m pytest tests\test_x.py::test_adi
+# Testler (tümü; tek test örneği)
+.\.venv\Scripts\python.exe -m pytest; .\.venv\Scripts\python.exe -m pytest tests\test_prompt_gate.py::test_onay_kalibi_baglam_eklemez
 ```
 
 ## Kurallar
