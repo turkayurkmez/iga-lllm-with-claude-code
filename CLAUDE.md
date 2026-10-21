@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Proje özeti
 
-AOCC Copilot: havalimanı Operasyon Kontrol Merkezi (AOCC) personeli için Claude tabanlı asistan. Hedef, canlı operasyon verisini (uçuş, gate/stand, kaynak, olay) tool'larla sorgulayıp özetlemek; şu an canlı veri bağlantısı yok. Python 3.13 + FastAPI backend, Anthropic Python SDK 1.x'e doğrudan API key ile bağlanır. Gün 1 iskelesi `docs/spec.md`'ye göre kuruluyor: docker compose (`db` Postgres 17 + `backend`), `db/schema.sql`, `synth/` sentetik veri üreteci. React frontend henüz yok (`frontend/` yer tutucu).
+AOCC Copilot: havalimanı Operasyon Kontrol Merkezi (AOCC) personeli için Claude tabanlı asistan. Hedef, canlı operasyon verisini (uçuş, gate/stand, kaynak, olay) tool'larla sorgulayıp özetlemek; şu an canlı veri bağlantısı yok. Python 3.13 + FastAPI backend, Anthropic Python SDK 1.x'e doğrudan API key ile bağlanır. Gün 1 iskelesi `docs/spec.md`'ye göre kuruluyor: docker compose (`db` Postgres 17 + `backend`), `db/schema.sql`, `synth/` sentetik veri üreteci. `frontend/`: Vite + React + TypeScript iskelesi (create-vite react-ts şablonu), henüz uygulama ekranı yok.
 
 - `backend/llm.py`: tek config ve istemci noktası. `.env`'yi import anında yükler (`scripts/` modül düzeyinde `client` import ettiği için böyle kalmalı); `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL`, `ANTHROPIC_TEMP_MODEL` eksik/boşsa Türkçe `ConfigError` fırlatır, yani bu modülü import eden her şey geçerli bir `.env` ister. Ortamdaki değişkenler `.env`'nin önüne geçer. `client` (senkron) script'ler, `async_client` FastAPI içindir.
 - `backend/main.py`: `GET /health`, `POST /chat` (`{"message": "..."}`; boş/boşluk mesaj 422). `backend.llm`'i modül düzeyinde import etmez, ilk `/chat`'te `load_llm()` ile yükler; böylece `/health` API anahtarı olmadan çalışır, ayar eksikse `/chat` 503 + genel mesaj döner. `/chat` yanıtı SSE akışıdır: `delta` (metin parçası) olayları, ardından `done` (`stop_reason`) ya da `error`.
@@ -19,6 +19,7 @@ AOCC Copilot: havalimanı Operasyon Kontrol Merkezi (AOCC) personeli için Claud
 - `data/referans/seed42-2026-10-20.json`: üreteçle (`--seed 42 --date 2026-10-20`) üretilen referans gün verisi; elle düzeltilmez. Özet: 600 uçuş (300/300), 4 iptal, 115 gecikmeli. `data/` `.gitignore`'da değil.
 - `docs/zarf.md`: tool çıktılarının ortak zarfı (8 sabit alan, 5 hata kodu, eksik alan hata değildir). Yeni tool bu sözleşmeye uyar. `backend/envelope.py` › `call_tool(registry, name, args)` zarfı kurar: tool yalnızca `{value, source, data_time?, error?}` döner, `as_of`/`stale`'i katman hesaplar (tool gönderirse yok sayılır), `ToolSpec.max_age` aşılırsa `STALE_DATA` (author=layer). Sözleşme `tests/test_envelope.py`'de; testler `zarf.md`'deki JSON örneklerini birebir karşılaştırır, örnek değişirse kod da değişmeli. Zarf `Envelope` pydantic modelinden kurulur; `docs/zarf.schema.json` bu modelden `python -m backend.envelope` ile üretilir, elle düzeltilmez (model değişince yeniden üret, yoksa test kırmızı).
 - `backend/tools/`: uçuş tool'ları, sözleşme `docs/tools.md`. Giriş noktaları yalnızca `run_tool(name, args)` (hiç istisna fırlatmaz, her sonuç zarftır) ve `tool_definitions()`. Tek doğruluk kaynağı `contracts/<tool>.json` (`name`, `version`, `description`, `input_schema`, `value_schema`); argümanlar `input_schema` ile jsonschema'da doğrulanır, ayrı pydantic şeması yoktur. Yeni tool `__init__.py` › `IMPLEMENTATIONS`'a kaydedilir; veriyi `_ortak.load_data(keys)` ile her çağrıda `COPILOT_DATA`'dan okur, veri hatasında `DataError` fırlatır (run_tool bunu `SCHEMA_VALIDATION_FAILED`, author=layer yapar). Sözleşme `tests/test_tools.py`'de (~25 sn; bozuk veriyi tmp'de `synth.corruption` ile üretir).
+- `frontend/`: npm projesi, `package-lock.json` commit edilir. `vite.config.ts` geliştirmede `/chat` ve `/health`'i `127.0.0.1:8000`'e proxy'ler; backend'de CORS yok, yeni endpoint eklenince proxy listesine de eklenmeli. Lint `oxlint`.
 - `backend/clock.py` › `now()`: `backend/` altında sistem saatinin okunduğu tek yer (`tests/test_clock.py` tarar). `COPILOT_NOW` doluysa sabit an (saat dilimi zorunlu, yoksa `ClockError`), boşsa sistem saati `+03:00`. Testler saati `monkeypatch.setenv("COPILOT_NOW", ...)` ile sabitler.
 - `docs/sorumluluk-zinciri.md`: deney bulgularından hangi işin LLM'e, hangisinin servise ait olduğuna dair GÖZLEM/KARAR tablosu.
 - `docs/superpowers/specs/`: ilk teknoloji kararları. uv/`pyproject.toml` ve Python 3.12 kararları geçerliliğini yitirdi; ortam pip + `.venv` + Python 3.13.
@@ -40,6 +41,10 @@ py -3.13 -m venv .venv; .\.venv\Scripts\python.exe -m pip install -r requirement
 # Endpoint denemesi (ayrı pencerede)
 curl.exe -s http://127.0.0.1:8000/health
 curl.exe -N -X POST http://127.0.0.1:8000/chat -H "Content-Type: application/json" --data-binary "@istek1.json"
+
+# Frontend (frontend/ klasöründen; dev sunucusu port 5173, backend ayrıca çalışmalı)
+npm install; npm run dev
+npm run build; npm run lint
 
 # Docker (db + backend); şema yüklenmesi için volume boş olmalı
 docker compose up --build
