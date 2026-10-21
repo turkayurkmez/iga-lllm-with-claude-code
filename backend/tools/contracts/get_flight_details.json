@@ -1,0 +1,117 @@
+{
+  "name": "get_flight_details",
+  "version": "1.0.0",
+  "description": "flight_id ile tek bir uçuşun kaydını döndürür: sefer no, callsign, tescil, uçak tipi, kalkış/varış meydanı, tarife ve tahmini zaman, iptal durumu; hareket yönü, atanmış stand ve gate, gerçekleşen pist ve block zamanları; varsa gecikme dakikası, kodu ve kategorisi; varsa son konum (ts zaman damgasıyla). Veride bulunmayan alan yanıtta yer almaz. Uçuş bulunamazsa NOT_FOUND döner.\n\nNe zaman kullanılır: resolve_flight_identity ile flight_id bulunduktan sonra o uçuşun saati, durumu, iptali, gecikmesi, stand'ı, gate'i ya da son konumu sorulduğunda. Örnek: resolve_flight_identity \"THY2345\" için FL-20261020-0270 döndürdüyse → {\"flight_id\": \"FL-20261020-0270\"}.\n\nNe zaman KULLANILMAZ: flight_id bilinmiyorken (önce resolve_flight_identity kullan; sefer no, callsign ya da tescili flight_id yerine verme); resolve_flight_identity AMBIGUOUS_ENTITY döndürdüğünde kullanıcı netleştirmeden; uçuş sayısı istendiğinde (get_flight_summary kullan); kayıt değiştirme ya da tahmin isteğinde. Yanıtta olmayan alanı başka alanlardan hesaplama (ör. tahmini zamanı tarife + gecikmeden çıkarma); konumu position.ts ile ver, güncelmiş gibi sunma.",
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "flight_id": {
+        "type": "string",
+        "pattern": "^FL-\\d{8}-\\d{4}$",
+        "description": "resolve_flight_identity sonucundaki flight_id, FL-YYYYMMDD-NNNN biçiminde, büyük harfle. Sefer no, callsign ya da tescil değildir.",
+        "examples": ["FL-20261020-0270"]
+      }
+    },
+    "required": ["flight_id"],
+    "additionalProperties": false
+  },
+  "value_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$defs": {
+      "timestamp": {
+        "type": "string",
+        "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\+03:00$",
+        "description": "ISO 8601, +03:00."
+      }
+    },
+    "anyOf": [
+      {
+        "type": "null",
+        "description": "Uçuş bulunamadı (NOT_FOUND)."
+      },
+      {
+        "type": "object",
+        "properties": {
+          "flight_id": {
+            "type": "string",
+            "pattern": "^FL-\\d{8}-\\d{4}$",
+            "examples": ["FL-20261020-0270"]
+          },
+          "flight_no": {"type": "string", "examples": ["TK2345"]},
+          "callsign": {"type": "string", "examples": ["THY2345"]},
+          "registration": {"type": "string", "examples": ["TC-LSD"]},
+          "aircraft_type": {"type": "string", "examples": ["A321"]},
+          "origin": {"type": "string", "examples": ["XXXX"]},
+          "destination": {"type": "string", "examples": ["VAN"]},
+          "scheduled_time": {
+            "$ref": "#/$defs/timestamp",
+            "examples": ["2026-10-20T15:40:00+03:00"]
+          },
+          "estimated_time": {
+            "$ref": "#/$defs/timestamp",
+            "examples": ["2026-10-20T16:05:00+03:00"]
+          },
+          "cancelled": {"type": "boolean", "examples": [false]},
+          "movement_type": {
+            "type": "string",
+            "enum": ["ARRIVAL", "DEPARTURE"],
+            "examples": ["DEPARTURE"]
+          },
+          "stand_code": {"type": "string", "examples": ["R236"]},
+          "gate_code": {"type": "string", "examples": ["BUS4"]},
+          "actual_runway_time": {
+            "$ref": "#/$defs/timestamp",
+            "examples": ["2026-10-20T16:09:00+03:00"]
+          },
+          "actual_block_time": {
+            "$ref": "#/$defs/timestamp",
+            "examples": ["2026-10-20T16:02:00+03:00"]
+          },
+          "delay_minutes": {"type": "integer", "examples": [25]},
+          "delay_code": {
+            "type": "string",
+            "pattern": "^\\d{2}$",
+            "examples": ["82"]
+          },
+          "delay_category": {
+            "type": "string",
+            "enum": [
+              "PASSENGER_BAGGAGE",
+              "AIRCRAFT_TECHNICAL",
+              "GROUND_HANDLING",
+              "WEATHER",
+              "ATC_RESTRICTION",
+              "AIRPORT_FACILITIES",
+              "REACTIONARY"
+            ],
+            "description": "delays.category.",
+            "examples": ["ATC_RESTRICTION"]
+          },
+          "position": {
+            "type": "object",
+            "description": "ts'si saate eşit ya da ondan önce olan son konum kaydı.",
+            "properties": {
+              "ts": {
+                "$ref": "#/$defs/timestamp",
+                "examples": ["2026-10-20T16:22:00+03:00"]
+              },
+              "lat": {"type": "number", "examples": [41.05]},
+              "lon": {"type": "number", "examples": [28.4]},
+              "heading_deg": {"type": "number", "examples": [235.0]},
+              "speed_kt": {"type": "number", "examples": [280.0]},
+              "phase": {
+                "type": "string",
+                "enum": ["APPROACH", "TAXI_IN", "AT_STAND", "TAXI_OUT", "CLIMB"],
+                "examples": ["CLIMB"]
+              }
+            },
+            "required": ["ts"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["flight_id"],
+        "additionalProperties": false
+      }
+    ]
+  }
+}

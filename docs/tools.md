@@ -1,0 +1,225 @@
+# Uçuş tool'ları: sözleşme
+
+Bu belge `get_flight_summary`, `resolve_flight_identity` ve `get_flight_details` tool'larının sözleşmesidir. Kod `backend/tools/` paketindedir (`__init__.py` giriş noktaları, `_ortak.py` ortak parçalar); sözleşme testleri koddan önce yazılır ve gevşetilmez. Tool çıktıları `docs/zarf.md`'deki ortak zarfla döner.
+
+## Ortak kurallar
+
+### Giriş noktaları
+
+Modülün dışarıya açtığı yalnızca iki giriş noktası vardır:
+
+| Giriş noktası | İmza | Ne döndürür | Kim kullanır |
+|---|---|---|---|
+| `run_tool` | `run_tool(name: str, args: Any) -> dict` | JSON'a yazılabilir zarf (`docs/zarf.md` › Alanlar; sekiz alanın hepsi). Hiçbir koşulda exception fırlatmaz; her sonuç zarftır. | Tool kullanım döngüsü: modelin `tool_use` bloğundaki `name` ve `input` doğrudan verilir. |
+| `tool_definitions` | `tool_definitions() -> list[dict]` | Üç tool'un Anthropic tool tanımı (`name`, `description`, `input_schema`), bu belgedeki sırayla. | `messages.create(tools=...)`. |
+
+- `run_tool`, zarfı `backend/envelope.py` › `call_tool` ile kurar. Tool zarfı kendisi kurmaz; yalnızca `{value, source, data_time?, error?}` döndürür. `as_of` ve `stale`'i katman hesaplar (`docs/zarf.md` › Tool ne döndürür).
+- Tool sistem saatini kendisi okumaz. O anki zaman gerekiyorsa (yalnızca `get_flight_details` › konum seçimi) `backend/clock.py` › `now()`'dan alınır.
+- `tool_definitions`'taki `input_schema`, `run_tool`'un argüman doğrulamasında kullanılan modelle aynı parametreleri, zorunlu alanları ve enum'ları tanımlar. Açıklamalar "ne döndürür / ne zaman kullanılır / ne zaman KULLANILMAZ" bölümlerini, enum değerlerini ve örnek değer içerir (CLAUDE.md › Kurallar).
+- Üç tool'un `tool_version`'ı `1.0.0`'dır. Hiçbirinde tazelik eşiği (`ToolSpec.max_age`) tanımlı değildir; bu yüzden `stale` her zaman `false` olur ve `STALE_DATA` dönmez.
+
+### Hata eşlemesi
+
+| Durum | Kod | Yazan | Zarf |
+|---|---|---|---|
+| `name` üç tool'dan biri değil | `CAPABILITY_NOT_IN_SCOPE` | `layer` | Tool çağrılmaz, veri okunmaz. `value`, `source`, `as_of`, `tool_version` `null`; `filters` `{}`. |
+| Argüman şemaya uymuyor (eksik zorunlu alan, ek alan, yanlış tip, enum dışı değer, nesne olmayan `args`) | `SCHEMA_VALIDATION_FAILED` | `layer` | Tool çağrılmaz, veri okunmaz. `value`, `source`, `as_of` `null`; `filters` `{}`; `tool_version` `1.0.0`. |
+| Veri okunamıyor ya da veri sözleşmeye uymuyor (aşağıda › Veri kaynağı) | `SCHEMA_VALIDATION_FAILED` | `layer` | `run_tool` tool'un veri hatasını yakalar. `value`, `source`, `as_of` `null`; `filters` doğrulanmış argümanlar; `tool_version` `1.0.0`; `message` çıktı reddindekiyle aynı genel metin. Ayrıntı yalnızca sunucu loguna yazılır. |
+| Tool çıktısı çıktı şemasına uymuyor | `SCHEMA_VALIDATION_FAILED` | `layer` | `call_tool`'un mevcut davranışı (`docs/zarf.md`). |
+| Aranan varlık yok | `NOT_FOUND` | `tool` | Tool'a göre ayrıntı aşağıda. |
+| Arama birden fazla varlıkla eşleşiyor | `AMBIGUOUS_ENTITY` | `tool` | Yalnızca `resolve_flight_identity` yazar. |
+
+Exception metni, dosya yolu ayrıntısı, yığın izi zarfa girmez (CLAUDE.md › Yasaklar).
+
+### Veri kaynağı
+
+- Veri, ortam değişkeni `COPILOT_DATA`'nın gösterdiği JSON dosyasıdır (`synth.generator` ya da `synth.corruption` çıktısı; biçim `docs/spec.md` §8).
+- `COPILOT_DATA` **her çağrıda** ortamdan okunur ve dosya her çağrıda yeniden açılır. Modül düzeyinde okuma, önbellek ya da import anında yükleme yoktur; değişken çalışma sırasında değişirse bir sonraki çağrı yeni dosyayı okur.
+- Zarfın `source`'u `COPILOT_DATA`'nın değeridir, olduğu gibi (çözümlenmiş mutlak yol değil).
+- Veri hatası sayılan durumlar: `COPILOT_DATA` tanımsız ya da boş; dosya yok ya da okunamıyor; içerik geçerli UTF-8 JSON değil; tool'un kullandığı üst anahtar (`meta`, `flights`, `movements`, `delays`, `positions`) yok; tool'un hesap için zorunlu tuttuğu bir alan kayıtta yok (tool tablolarında "zorunlu alan" olarak belirtilir).
+- Hesap için zorunlu olmayan bir alanın kayıtta bulunmaması hata değildir (`docs/zarf.md` › Eksik alan hata değildir): alan `value`'ya yazılmaz.
+- Kaynakta değeri `null` olan alan da `value`'ya yazılmaz (ör. iptal edilen uçuşun `stand_code`'u). `value`'da `null` değerli alan bulunmaz.
+- Yetim kayıtlar (`flights`'ta karşılığı olmayan `movements`, `positions`, `delays` satırları; `docs/bozulma.md` › `undefined_flight`) hiçbir tool'da kullanılmaz: sayılmaz, aranmaz, döndürülmez.
+
+## `get_flight_summary`
+
+Günün uçuşlarının sayısal özeti. Hesap tamamen tool'da yapılır; model sayıyı yorumlar, yeniden hesaplamaz.
+
+### Girdi
+
+| Alan | Tip | Zorunlu | Değerler | Örnek | Açıklama |
+|---|---|---|---|---|---|
+| `direction` | metin | evet | `all`, `arrival`, `departure` | `"all"` | `all`: tüm uçuşlar; `arrival`: `movement_type` `ARRIVAL` olanlar; `departure`: `movement_type` `DEPARTURE` olanlar. Kullanıcı yön belirtmediyse model `all` verir. Büyük harfli değer (`ALL`) enum dışıdır. |
+
+### `value`
+
+| Alan | Tip | Kaynak / hesap | Örnek (`seed42-2026-10-20`, `all`) |
+|---|---|---|---|
+| `date` | metin, `YYYY-MM-DD` | `meta.date` | `"2026-10-20"` |
+| `direction` | metin | Doğrulanmış `direction` argümanı | `"all"` |
+| `total` | tamsayı | `flights`'ta kaydı olan ve `movements`'ta yönü eşleşen uçuşların sayısı; iptal edilenler dahil | `600` |
+| `cancelled` | tamsayı | Bu uçuşlardan `cancelled` değeri `true` olanların sayısı | `4` |
+| `delayed` | tamsayı | Bu uçuşlardan `delays`'te kaydı olanların sayısı (`flight_id` başına bir) | `115` |
+
+Zorunlu alanlar (yoksa veri hatası): `meta.date`; her `flights` kaydında `flight_id` ve `cancelled`; her `movements` kaydında `flight_id` ve `movement_type`.
+
+`data_time` verilmez; `as_of` çağrı anındaki saattir. Özet saatten bağımsızdır: günün tamamını sayar, saate göre süzmez.
+
+### `filters`
+
+| Alan | Değer | Örnek |
+|---|---|---|
+| `direction` | Doğrulanmış argüman, verildiği gibi | `{"direction": "all"}` |
+
+### Kenar durumlar
+
+| Durum | Sonuç | Agent ne yapar |
+|---|---|---|
+| `direction` verilmemiş | `SCHEMA_VALIDATION_FAILED`, `author: layer`, `filters: {}` | Argümanı `all` ile düzeltip bir kez yeniden çağırır. |
+| `direction` enum dışı (`"ALL"`, `"gelen"`, `""`) | `SCHEMA_VALIDATION_FAILED`, `author: layer`, `filters: {}` | Enum'daki değerle bir kez yeniden çağırır. |
+| Ek argüman (ör. `{"direction": "all", "airline": "TK"}`) | `SCHEMA_VALIDATION_FAILED`, `author: layer`, `filters: {}` | Kırılımın desteklenmediğini söyler; ek alanı atıp yalnızca istenirse bir kez yeniden çağırır. |
+| Yöne uyan hiç uçuş yok | Hata değil; `total`, `cancelled`, `delayed` `0`, `error: null` | Sıfırı kaynağıyla verir; sayı uydurmaz. |
+| İptal edilen uçuş | `total`'e ve `cancelled`'a girer; `delayed`'e girmez (iptalde gecikme kaydı yoktur, `docs/spec.md` §7) | Toplamın iptalleri içerdiğini belirtebilir; `total − cancelled` gibi bir hesabı kendisi yapmaz. |
+| `undefined_flight` uygulanmış veri (yetim `movements`/`delays`) | Yetim kayıtlar sayılmaz; `total` ve `delayed` bir eksik çıkar | Verilen sayıyı kullanır; yetim kayıtları kendisi sayıya eklemez. |
+| `duplicate_callsign` uygulanmış veri | Etkisi yok; sayım `flight_id` üzerinden yapılır | Normal yanıt verir. |
+| `missing_field`: bir uçuşta `flights.cancelled` ya da `movements.movement_type` yok | Veri hatası: `SCHEMA_VALIDATION_FAILED`, `author: layer`, `value: null`, `filters` doğrulanmış argüman | İsteğin şu an yanıtlanamadığını söyler; kısmi sayı vermez, yeniden denemez. |
+| `missing_field`: sayımda kullanılmayan bir alan yok (ör. `flights.estimated_time`) | Etkisi yok | Normal yanıt verir. |
+| `COPILOT_DATA` tanımsız, boş, dosya yok ya da JSON bozuk | Veri hatası: `SCHEMA_VALIDATION_FAILED`, `author: layer`, `source: null` | İsteğin şu an yanıtlanamadığını söyler; yeniden denemez. |
+| Model tek bir sefer hakkında bu tool'u çağırıyor | Tool sefer argümanı almaz; ek argüman verilirse `SCHEMA_VALIDATION_FAILED` | `resolve_flight_identity` ve `get_flight_details` kullanır. |
+
+## `resolve_flight_identity`
+
+Kullanıcının verdiği kimliği (sefer no, callsign ya da tescil) uçuş kaydına çevirir. `get_flight_details`'e verilecek `flight_id`'yi bulmanın tek yolu budur; belirsizliği bu tool ortaya çıkarır.
+
+### Girdi
+
+| Alan | Tip | Zorunlu | Değerler | Örnek | Açıklama |
+|---|---|---|---|---|---|
+| `query` | metin | evet | Boşluk kırpıldıktan sonra en az 1 karakter | `"THY2345"` | Sefer no (`TK2345`), callsign (`THY2345`) ya da tescil (`TC-LSD`). Model kimliğin türünü belirtmez; tool üç alanda da arar. |
+
+**Eşleşme kuralı.** `query`'nin başındaki ve sonundaki boşluk kırpılır, büyük/küçük harf farkı yok sayılır; `flights` kayıtlarının `flight_no`, `callsign` ve `registration` alanlarıyla **tam eşitlik** aranır. Tek istisna sayı kısmındaki baştaki sıfırlardır: harf öneki + rakamlardan oluşan değerlerde (`flight_no`, `callsign`) rakamların başındaki sıfırlar hem sorguda hem kayıtta yok sayılır, en az bir rakam kalır (`THY15` = `THY0015`, `TK02344` = `TK2344`). `registration`'a uygulanmaz. Bunun dışında kısmi eşleşme, önek araması, benzerlik ya da yazım düzeltmesi yapılmaz (`TK234`, `15`, `THY` hiçbir şeyle eşleşmez). Yalnızca `flights` kayıtları aranır.
+
+### `value`
+
+Eşleşme sayısına göre üç biçimi vardır:
+
+| Eşleşme | `value` | `error` |
+|---|---|---|
+| 0 | `null` | `NOT_FOUND`, "Bu kimlikle uçuş bulunamadı." |
+| 1 | Aday nesnesi | `null` |
+| 2 ve üzeri | Aday nesnelerinin listesi, `flight_id`'ye göre artan | `AMBIGUOUS_ENTITY`, "Bu kimlik birden fazla uçuşla eşleşiyor." |
+
+Aday nesnesi:
+
+| Alan | Tip | Kaynak | Örnek (`THY2345`) |
+|---|---|---|---|
+| `flight_id` | metin | `flights.flight_id` | `"FL-20261020-0270"` |
+| `flight_no` | metin | `flights.flight_no` | `"TK2345"` |
+| `callsign` | metin | `flights.callsign` | `"THY2345"` |
+| `registration` | metin | `flights.registration` | `"TC-LSD"` |
+| `movement_type` | metin, `ARRIVAL`/`DEPARTURE` | `movements.movement_type` | `"DEPARTURE"` |
+| `scheduled_time` | ISO 8601, `+03:00` | `flights.scheduled_time` | `"2026-10-20T15:40:00+03:00"` |
+| `matched_on` | metin, `flight_no`/`callsign`/`registration` | Eşleşen alan. Aynı kayıt birden fazla alanda eşleşirse öncelik `flight_no` > `callsign` > `registration` | `"callsign"` |
+
+Zorunlu alanlar (yoksa veri hatası): her `flights` kaydında `flight_id`. `flight_no`, `callsign`, `registration`, `scheduled_time` ya da `movement_type` bir kayıtta yoksa o kayıt o alanda aranmaz ve aday nesnesine o alan yazılmaz.
+
+`data_time` verilmez; `as_of` çağrı anındaki saattir.
+
+### `filters`
+
+| Alan | Değer | Örnek |
+|---|---|---|
+| `query` | Doğrulanmış argüman, modelin verdiği haliyle (kırpma ve harf dönüşümü yalnızca eşleşmede uygulanır) | `{"query": "THY2345"}` |
+
+### Kenar durumlar
+
+| Durum | Sonuç | Agent ne yapar |
+|---|---|---|
+| `query` verilmemiş, boş ya da yalnızca boşluk | `SCHEMA_VALIDATION_FAILED`, `author: layer`, `filters: {}` | Kullanıcıdan sefer no, callsign ya da tescil ister; uydurmaz. |
+| `query` metin değil (ör. `2345`) | `SCHEMA_VALIDATION_FAILED`, `author: layer`, `filters: {}` | Değeri metin olarak bir kez yeniden gönderir. |
+| `ZZ9999` (`docs/spec.md` §9) | `NOT_FOUND`, `value: null`, `author: tool` | Kaydın bulunamadığını `filters.query` ile söyler; benzer bir sefer önermez. |
+| Kısmi değer (`TK234`, `2345`) | `NOT_FOUND` | Tam sefer no, callsign ya da tescil ister. |
+| Küçük harf ya da boşluklu değer (`" thy2345 "`) | Tek eşleşme, `matched_on: "callsign"`; `filters.query` `" thy2345 "` | Normal yanıt verir. |
+| Sayıda baştaki sıfır (`"THY02345"`, `"TK02344"`; kayıtta `TK0015` iken `"tk15"`) | Sıfırlar yok sayılır; tek eşleşme, `filters.query` verildiği haliyle | Normal yanıt verir. |
+| Tescil ile arama (`TC-LSD`) | Uçağın günlük arrival/departure çifti nedeniyle genellikle 2+ eşleşme: `FL-20261020-0269` (`TK2344`) ve `FL-20261020-0270` (`TK2345`); `AMBIGUOUS_ENTITY` | Adayların hepsini sefer no, yön ve tarifeyle listeler; hangisinin sorulduğunu sorar. Birini kendisi seçmez. |
+| `duplicate_callsign` uygulanmış veride callsign ile arama | 2 eşleşme, `AMBIGUOUS_ENTITY` | Adayları sefer no, tescil ve tarifeyle listeler; sefer no ya da tescille netleştirme ister. |
+| `duplicate_callsign` uygulanmış veride sefer no ile arama | Tek eşleşme | Normal yanıt verir. |
+| `undefined_flight` uygulanmış veride hedefin sefer no'su ya da callsign'ı | `NOT_FOUND`; yetim kayıtlara bakılmaz | Kaydın bulunamadığını söyler; yetim kayıtlardan bilgi kurmaz. |
+| İptal edilen uçuş | Normal aday olarak döner (iptal durumu adayda yoktur) | İptal durumunu `get_flight_details` ile öğrenir. |
+| `missing_field`: kayıtta `flights.callsign` yok | O kayıt callsign ile bulunamaz; sefer no ve tescille bulunur, adayda `callsign` alanı yoktur | Bulunamadıysa `NOT_FOUND` olarak söyler; callsign'ı sefer no'dan türetmez. |
+| `COPILOT_DATA` tanımsız, boş, dosya yok ya da JSON bozuk | Veri hatası: `SCHEMA_VALIDATION_FAILED`, `author: layer`, `source: null` | İsteğin şu an yanıtlanamadığını söyler; yeniden denemez. |
+
+## `get_flight_details`
+
+Tek bir uçuşun kaydını, hareketini, gecikmesini ve son konumunu döndürür. Uçuşu `flight_id` ile alır; `flight_id` `resolve_flight_identity`'den gelir, bu yüzden bu tool belirsizlik üretmez.
+
+### Girdi
+
+| Alan | Tip | Zorunlu | Değerler | Örnek | Açıklama |
+|---|---|---|---|---|---|
+| `flight_id` | metin | evet | `FL-YYYYMMDD-NNNN` biçimi (`docs/spec.md` §6), büyük harfle, tam eşitlik | `"FL-20261020-0270"` | `resolve_flight_identity` sonucundaki `flight_id`. Sefer no, callsign ya da tescil değildir. |
+
+### `value`
+
+| Alan | Tip | Kaynak | Örnek (`FL-20261020-0270`, saat 16:22) |
+|---|---|---|---|
+| `flight_id` | metin | `flights.flight_id` | `"FL-20261020-0270"` |
+| `flight_no` | metin | `flights.flight_no` | `"TK2345"` |
+| `callsign` | metin | `flights.callsign` | `"THY2345"` |
+| `registration` | metin | `flights.registration` | `"TC-LSD"` |
+| `aircraft_type` | metin | `flights.aircraft_type` | `"A321"` |
+| `origin` | metin | `flights.origin` | `"XXXX"` |
+| `destination` | metin | `flights.destination` | `"VAN"` |
+| `scheduled_time` | ISO 8601, `+03:00` | `flights.scheduled_time` | `"2026-10-20T15:40:00+03:00"` |
+| `estimated_time` | ISO 8601, `+03:00` | `flights.estimated_time` | `"2026-10-20T16:05:00+03:00"` |
+| `cancelled` | boolean | `flights.cancelled` | `false` |
+| `movement_type` | metin, `ARRIVAL`/`DEPARTURE` | `movements.movement_type` | `"DEPARTURE"` |
+| `stand_code` | metin | `movements.stand_code` | `"R236"` |
+| `gate_code` | metin | `movements.gate_code` | `"BUS4"` |
+| `actual_runway_time` | ISO 8601, `+03:00` | `movements.actual_runway_time` | `"2026-10-20T16:09:00+03:00"` |
+| `actual_block_time` | ISO 8601, `+03:00` | `movements.actual_block_time` | `"2026-10-20T16:02:00+03:00"` |
+| `delay_minutes` | tamsayı | `delays.delay_minutes` | `25` |
+| `delay_code` | metin | `delays.delay_code` | `"82"` |
+| `delay_category` | metin | `delays.category` (ad çakışmasın diye önekli) | `"ATC_RESTRICTION"` |
+| `position` | nesne | `positions`'ta bu uçuşun `ts`'si `clock.now()`'a eşit ya da ondan önce olan kayıtları arasında `ts`'si en büyük olanı; alanları `ts`, `lat`, `lon`, `heading_deg`, `speed_kt`, `phase` | `{"ts": "2026-10-20T16:22:00+03:00", "lat": 41.05, "lon": 28.4, "heading_deg": 235.0, "speed_kt": 280.0, "phase": "CLIMB"}` |
+
+- `flights.status` döndürülmez (üreteçten gelmez, `docs/spec.md` §6).
+- Kaynakta olmayan ya da `null` olan her alan `value`'ya yazılmaz; `position` nesnesinin alanları için de aynı kural geçerlidir. Gecikmesi olmayan uçuşta `delay_*` alanları, konumu olmayan uçuşta `position` yoktur.
+- `ts` karşılaştırması metinle değil zaman damgasıyla yapılır.
+- Zorunlu alanlar (yoksa veri hatası): her `flights`, `movements`, `delays`, `positions` kaydında `flight_id`; seçilen uçuşun her `positions` kaydında `ts`.
+
+`data_time` verilmez; `as_of` çağrı anındaki saattir. Konumun ait olduğu an `position.ts`'dedir ve `as_of`'tan farklı olabilir. Konumun tazeliği bu tool'da denetlenmez (`stale: false`); tazelik eşikli konum sorgusu ayrı bir tool'un (`get_flight_position`, `docs/zarf.md` › Örnekler) işidir.
+
+### `filters`
+
+| Alan | Değer | Örnek |
+|---|---|---|
+| `flight_id` | Doğrulanmış argüman, verildiği gibi | `{"flight_id": "FL-20261020-0270"}` |
+
+### Kenar durumlar
+
+| Durum | Sonuç | Agent ne yapar |
+|---|---|---|
+| `flight_id` verilmemiş ya da biçime uymuyor (`"TK2345"`, `"fl-20261020-0270"`, `""`) | `SCHEMA_VALIDATION_FAILED`, `author: layer`, `filters: {}` | Önce `resolve_flight_identity` ile `flight_id`'yi bulur; sefer no'yu `flight_id` diye göndermez. |
+| Biçime uyan ama `flights`'ta olmayan `flight_id` | `NOT_FOUND`, "Bu kimlikle uçuş bulunamadı.", `value: null`, `author: tool` | Kaydın bulunamadığını söyler; `flight_id`'yi kendisi tahmin edip yeniden denemez. |
+| `undefined_flight` uygulanmış veride hedefin `flight_id`'si | `NOT_FOUND`; yetim `movements`, `positions`, `delays` kullanılmaz | Kaydın bulunamadığını söyler; uygunsa veri tutarsızlığını belirtir; yetim kayıtlardan bilgi kurmaz. |
+| İptal edilen uçuş | `cancelled: true`; `movement_type` vardır; `stand_code`, `gate_code`, `actual_*`, `delay_*`, `position` yoktur (kaynakta `null` ya da kayıt yok) | Uçuşun iptal olduğunu söyler; stand, gate ya da konum uydurmaz. |
+| Gecikmesiz uçuş | `delay_*` alanları yok; `estimated_time` `scheduled_time`'a eşit | Gecikme olmadığını söyler. |
+| Konum izi henüz başlamamış (tüm `ts` değerleri `clock.now()`'dan sonra) | `position` yok | Konum verisi olmadığını söyler; gelecekteki iz noktasını vermez. |
+| Konum izi bitmiş (inmiş, ya da kalkıp izden çıkmış uçuş) | `position` izin son noktasıdır; `position.ts` `as_of`'tan eski olabilir | Konumu `position.ts` zaman damgasıyla verir; güncelmiş gibi sunmaz. |
+| `stale_position` uygulanmış veri | `position` kalan son noktadır (10 dakika eski); `stale: false`, `error: null` | Konumu `position.ts` ile verir ve `as_of`'tan eski olduğunu söyler; ara değerleme yapmaz, block zamanından konum çıkarmaz. |
+| `movements`'ta saatten sonraki `actual_*` zamanı | Kaynaktaki haliyle döner; tool `actual_*` alanlarını saate göre süzmez | Alanı kaynaktaki değeriyle verir; durumu (`ACTIVE`/`COMPLETED`) kendisi türetmez. |
+| `missing_field`: `flights.estimated_time` yok | `estimated_time` alanı yok; `delay_minutes` durur | Tahmini zamanın veride bulunmadığını söyler; tarife + gecikmeden hesaplamaz. |
+| `missing_field`: `movements.*` ya da `delays.*` alanı yok | O alan `value`'da yok; diğer alanlar durur | Alanın veride bulunmadığını söyler; diğer alanlarla yanıt verir. |
+| `duplicate_callsign` uygulanmış veri | Etkisi yok; arama `flight_id` ile yapılır | Normal yanıt verir. |
+| `COPILOT_DATA` tanımsız, boş, dosya yok ya da JSON bozuk | Veri hatası: `SCHEMA_VALIDATION_FAILED`, `author: layer`, `source: null` | İsteğin şu an yanıtlanamadığını söyler; yeniden denemez. |
+
+## Örnek akış
+
+Soru: "THY2345 hangi stand'da?" (`COPILOT_DATA=data/referans/seed42-2026-10-20.json`, `COPILOT_NOW=2026-10-20T16:22:00+03:00`)
+
+1. `run_tool("resolve_flight_identity", {"query": "THY2345"})` → tek aday, `flight_id` `FL-20261020-0270`, `matched_on: "callsign"`.
+2. `run_tool("get_flight_details", {"flight_id": "FL-20261020-0270"})` → `stand_code` `R236`, `gate_code` `BUS4`.
+3. Agent: "TK2345'e (THY2345) atanan stand R236, gate BUS4. Kayda göre uçak 16:02'de stand'dan ayrılmış, 16:09'da kalkmış. Kaynak: data/referans/seed42-2026-10-20.json, 16:22 itibarıyla." (`actual_block_time` ve `actual_runway_time` kayıttan okunur; agent stand'da olduğunu söylemez.)
+
+Soru tescille gelseydi (`TC-LSD`), 1. adım `AMBIGUOUS_ENTITY` ile `TK2344` ve `TK2345`'i döndürür; agent hangisinin sorulduğunu sorar ve 2. adıma geçmez.

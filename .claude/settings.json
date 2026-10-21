@@ -13,6 +13,19 @@
           }
         ]
       }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "powershell -NoProfile -ExecutionPolicy Bypass -File \"$CLAUDE_PROJECT_DIR/.claude/hooks/tool-tests.ps1\"",
+            "timeout": 120,
+            "statusMessage": "Tool testleri koşuyor..."
+          }
+        ]
+      }
     ]
   }
 }
