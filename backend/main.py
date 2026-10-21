@@ -10,11 +10,13 @@ from collections.abc import AsyncIterator
 from types import ModuleType
 
 import anthropic
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import StreamingResponse
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel, field_validator
+from starlette.concurrency import run_in_threadpool
 
 from backend.prompts import SYSTEM_INSTRUCTIONS
+from backend.tools import run_tool, tool_definitions
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -26,6 +28,19 @@ ERROR_MESSAGE = "Yanıt üretilirken bir hata oluştu. Lütfen daha sonra tekrar
 CONFIG_ERROR_MESSAGE = (
     "Sohbet servisi şu anda yapılandırılmamış. Lütfen yöneticinize başvurun."
 )
+INVALID_JSON_MESSAGE = "İstek gövdesi geçerli JSON değil."
+UNEXPECTED_MESSAGE = "Beklenmeyen bir hata oluştu."
+
+# Zarfın error.code'u → HTTP durum kodu (docs/http.md › Durum kodu eşlemesi).
+# Tablo kapalıdır: listede olmayan kod 500 olur.
+STATUS_BY_CODE = {
+    None: 200,
+    "STALE_DATA": 200,
+    "NOT_FOUND": 404,
+    "AMBIGUOUS_ENTITY": 409,
+    "CAPABILITY_NOT_IN_SCOPE": 404,
+    "SCHEMA_VALIDATION_FAILED": 422,
+}
 
 app = FastAPI(title="AOCC Copilot")
 
@@ -80,6 +95,43 @@ async def stream_reply(llm: ModuleType, message: str) -> AsyncIterator[str]:
 @app.get("/health")
 async def health() -> dict:
     return {"status": "ok"}
+
+
+def json_response(content: object, status_code: int) -> Response:
+    """/tools yanıtı: UTF-8, kaçışsız JSON; tool sonucu canlı veri, önbelleğe alınmaz."""
+    # JSONResponse charset eklemez ve ensure_ascii=True yazar; ikisi de sözleşmeye aykırı.
+    return Response(
+        content=json.dumps(content, ensure_ascii=False).encode("utf-8"),
+        status_code=status_code,
+        media_type="application/json; charset=utf-8",
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+@app.get("/tools")
+async def list_tools() -> Response:
+    return json_response(tool_definitions(), 200)
+
+
+@app.post("/tools/{name}")
+async def call_tool(name: str, request: Request) -> Response:
+    """Gövdeyi argüman olarak run_tool'a verir; zarfı değiştirmeden taşır (docs/http.md)."""
+    raw = await request.body()
+    try:
+        args = json.loads(raw.decode("utf-8"))
+    except (UnicodeDecodeError, ValueError):
+        logger.exception("Tool isteğinin gövdesi çözülemedi: %s", name)
+        return json_response({"detail": INVALID_JSON_MESSAGE}, 400)
+
+    try:
+        # run_tool veriyi diskten okur; olay döngüsünü bloklamasın.
+        envelope = await run_in_threadpool(run_tool, name, args)
+        error = envelope["error"]
+        status_code = STATUS_BY_CODE[None if error is None else error["code"]]
+        return json_response(envelope, status_code)
+    except Exception:
+        logger.exception("Tool çağrısı taşınamadı: %s", name)
+        return json_response({"detail": UNEXPECTED_MESSAGE}, 500)
 
 
 @app.post("/chat")
