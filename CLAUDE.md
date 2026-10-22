@@ -69,7 +69,7 @@ $env:PYTHONIOENCODING="utf-8"; .\.venv\Scripts\python.exe -m synth.generator --s
 .\.venv\Scripts\python.exe -m synth.stream --in synth\out\2026-10-20.json --from 16:00 [--speed 600] [--no-wait]
 git -c core.autocrlf=false diff --no-index --stat synth\out\2026-10-20.json synth\out\stale.json   # bozulma farkı
 
-# Yalnızca üreteç testleri (~15 sn; tüm paket ~350-400 sn, timeout'u 600 sn ver)
+# Yalnızca üreteç testleri (~15 sn; tüm paket ~350-400 sn, ön planda timeout 600 sn ile koş, run_in_background kullanma)
 .\.venv\Scripts\python.exe -m pytest tests\test_generator.py
 
 # Uçtan uca sunucu testi: arka planda başlat, /health'i yokla, try/finally ile kapat
@@ -93,6 +93,9 @@ try { <for döngüsüyle /health yokla; istekleri at> } finally { Stop-Process -
 - `.claude/agents/` altına yeni eklenen subagent, oturum yeniden başlatılana kadar Agent aracında görünmez (`/agents` sihirbazı yok).
 - Frontend'de `erasableSyntaxOnly` açık: TS `enum` yerine `as const` nesne + aynı adla union tip kullanılır (`src/envelope.ts`); yalnızca tip içeren `namespace` serbest.
 - Frontend'de test çalıştırıcı yok. Mantık `node dosya.ts` ile sınanır (Node 24 tipleri soyar); `src/` import'ları uzantısız olduğundan dosyalar scratchpad'e kopyalanır ve import'lara `.ts` eklenir. Repoya test eklenmez.
+- `chat.ts`'i sınamak için `/chat` gövdeleri API'siz üretilir: `ANTHROPIC_*`'ı sahte değerle doldur, `backend.llm`'i import et, `main.load_llm`'i ona bağla, `llm.client`'ı sahte istemciyle değiştir, `TestClient(main.app).post("/chat", ...)` ile al ve JSON olarak `node` denemesine ver. Gövdeyi farklı parça boylarıyla (1, 7, 64) beslemek, `parseSse`'nin yarım olay davranışını sınar.
+- Gerçek tool'ların hiçbirinde `max_age` yok, yani `STALE_DATA`/`stale: true` gerçek veriyle üretilemez. Testte `backend.agent.run_tool` monkeypatch edilerek sahte zarf verilir.
+- Olay ya da liste üzerinde gezen kırmızı testte önce beklenen türün var olduğunu ve sayısını assert et. Yoksa `all(...)`/döngü boş listede geçer ve test kod yokken de yeşil kalır.
 - "Tarayıcıda göster" / tasarım seçeneği istendiğinde önizleme yerelde yapılır (Vite rotası ya da açılabilen HTML); claude.ai artifact'ı yalnızca açıkça istenirse.
 - Yanıttan metin alırken yalnızca `block.type == "text"` blokları birleştirilir; içerikte thinking blokları da olabilir.
 - `max_tokens` varsayılanı 16000; thinking de çıktı token'ı harcar.
