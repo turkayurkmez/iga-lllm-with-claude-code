@@ -54,6 +54,7 @@ diğer dört durum     : error, done
 model çağrısı hatası : error            (done yok)
 ```
 
+- Zamanlama: olaylar `run_agent`'a verilen saran bir istemciden (`backend/main.py` › `EventingClient`) üretilir. Bir turun `tool_call` ve kart olayları, tool'lar çalıştıktan sonra, bir sonraki model çağrısının başında (o isteğin `tool_result`'larından) yazılır; olay sırası yukarıdaki gibidir. "Çalıştırmadan önce" olayın akıştaki yerini anlatır, yazılma anını değil.
 - `tool_use` ile biten turun metni (ör. "Kontrol ediyorum") operatöre gitmez; yalnızca döngünün mesaj geçmişinde kalır.
 - Bitiş turundaki çalıştırılmayan istekler (`executed: false`; `docs/agent.md` › Durumlar) için `tool_call` çıkmaz.
 - Akış tam olarak bir son olayla biter: `done` ya da (model çağrısı hatasında) `error`. Ondan sonra olay yazılmaz.
@@ -84,6 +85,7 @@ model çağrısı hatası : error            (done yok)
 | `max_tokens` | `error` (`code: max_tokens`, `message: reason`), `done` |
 | `durduruldu` | `error` (`code: durduruldu`, `message: reason`), `done` |
 | Model çağrısı başarısız | `error` (`code: model_error`, `message: ERROR_MESSAGE`); `done` yok, ayrıntı yalnızca sunucu logunda |
+| Döngüde beklenmeyen hata | Model hatasıyla aynı: `error` (`code: model_error`), `done` yok; ayrıntı yalnızca sunucu logunda |
 
 Zarf hata kodlarına (sabit beş) yeni kod eklenmez; akış hataları zarftan ayrıdır.
 

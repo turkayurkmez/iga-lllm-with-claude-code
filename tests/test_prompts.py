@@ -2,16 +2,18 @@
 
 Testler koddan önce yazıldı; talimat sözleşmeye uydurulana kadar sürüm, değişiklik
 günlüğü, tool adı, hata kodu ve "canlı veri yok" testleri kırmızıdır. Gerçek API
-çağrısı yapılmaz: /chat testi sahte bir async istemciyle çalışır. Ücretli ölçüm
+çağrısı yapılmaz: /chat testi sahte bir istemciyle çalışır. Ücretli ölçüm
 testleri pytest'e girmez.
 """
 
 import copy
+import importlib
 import re
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from anthropic.types import Message, TextBlock, Usage
 from fastapi.testclient import TestClient
 
 from backend import main, prompts
@@ -20,6 +22,7 @@ from backend.tools import tool_definitions
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 CONTRACT = REPO_ROOT / "docs" / "system-talimat.md"
+LLM_VARS = ("ANTHROPIC_API_KEY", "ANTHROPIC_MODEL", "ANTHROPIC_TEMP_MODEL")
 
 # İlke 5'te adıyla geçen dört kod; STALE_DATA İlke 6'da davranışla anlatılır.
 PRINCIPLE_CODES = {
@@ -57,45 +60,34 @@ def changelog_last_version() -> str:
     return rows[-1].split("|")[1].strip().strip("`")
 
 
-class FakeStream:
-    """messages.stream'in döndürdüğü async bağlam yöneticisinin taklidi."""
-
-    def __init__(self, text: str):
-        self._text = text
-
-    async def __aenter__(self):
-        return self
-
-    async def __aexit__(self, *exc_info):
-        return False
-
-    @property
-    def text_stream(self):
-        async def chunks():
-            yield self._text
-
-        return chunks()
-
-    async def get_final_message(self):
-        return SimpleNamespace(stop_reason="end_turn")
-
-
 class FakeMessages:
+    """/chat'in agent döngüsünün messages.create çağrılarını kaydeder."""
+
     def __init__(self):
         self.requests: list[dict] = []
 
-    def stream(self, **kwargs):
+    def create(self, **kwargs):
         self.requests.append(copy.deepcopy(kwargs))
-        return FakeStream("Merhaba.")
+        return Message(
+            id="msg_test",
+            type="message",
+            role="assistant",
+            model="test-model",
+            content=[TextBlock(type="text", text="Merhaba.")],
+            stop_reason="end_turn",
+            stop_sequence=None,
+            usage=Usage(input_tokens=1, output_tokens=1),
+        )
 
 
 @pytest.fixture
 def fake_llm(monkeypatch):
+    # Döngü backend.llm'i kendisi de import eder; .env gerekmesin diye ortam verilir.
+    for name in LLM_VARS:
+        monkeypatch.setenv(name, f"test-{name.lower()}")
     messages = FakeMessages()
-    llm = SimpleNamespace(
-        MODEL="sahte-model",
-        async_client=SimpleNamespace(messages=messages),
-    )
+    llm = importlib.import_module("backend.llm")
+    monkeypatch.setattr(llm, "client", SimpleNamespace(messages=messages))
     monkeypatch.setattr(main, "load_llm", lambda: llm)
     return messages
 

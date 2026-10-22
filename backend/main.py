@@ -3,11 +3,13 @@
 Repo kökünden çalıştırın: uvicorn backend.main:app --reload
 """
 
+import asyncio
 import importlib
 import json
 import logging
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from types import ModuleType
+from typing import Any
 
 import anthropic
 from fastapi import FastAPI, HTTPException, Request
@@ -16,12 +18,12 @@ from pydantic import BaseModel, field_validator
 from starlette.concurrency import run_in_threadpool
 
 from backend import instructions
+from backend.agent import run_agent
+from backend.cards import CardBuilder
 from backend.tools import run_tool, tool_definitions
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-MAX_TOKENS = 16000
 
 # İstemciye yalnızca bu genel mesaj gider; hatanın ayrıntısı sunucu loguna yazılır.
 ERROR_MESSAGE = "Yanıt üretilirken bir hata oluştu. Lütfen daha sonra tekrar deneyin."
@@ -72,26 +74,99 @@ def sse_event(event: str, data: dict) -> str:
     return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
 
 
-async def stream_reply(
-    llm: ModuleType, system: str, message: str
-) -> AsyncIterator[str]:
-    """Model yanıtını SSE olayları olarak üretir: delta*, ardından done ya da error."""
+Emit = Callable[[str, dict], None]
+
+
+class EventingClient:
+    """run_agent'a verilen istemci: model çağrılarını sarar, tool olaylarını üretir.
+
+    Döngü bir turun tool'larını çalıştırınca sonuçları bir sonraki model isteğinin
+    son mesajında gönderir; sarmalayıcı o isteğin başında, çalışan her çağrı için
+    tool_call'ı ve zarftan kartları yayar (docs/chat.md › Sıra). Çalıştırılmayan
+    çağrıların ardından model çağrılmadığı için onlar için olay çıkmaz.
+    """
+
+    def __init__(self, client: Any, emit: Emit):
+        self._client = client
+        self._emit = emit
+        self._cards = CardBuilder()
+        self._pending: list = []
+        self.messages = self
+
+    def create(self, **request: Any) -> Any:
+        if self._pending:
+            self._emit_turn(self._pending, request["messages"][-1]["content"])
+            self._pending = []
+        response = self._client.messages.create(**request)
+        if response.stop_reason == "tool_use":
+            self._pending = [b for b in response.content if b.type == "tool_use"]
+        return response
+
+    def _emit_turn(self, calls: list, results: list[dict]) -> None:
+        envelopes = {r["tool_use_id"]: json.loads(r["content"]) for r in results}
+        for call in calls:
+            self._emit(
+                "tool_call", {"id": call.id, "name": call.name, "input": call.input}
+            )
+        for call in calls:
+            for event, data in self._cards.cards(call.name, envelopes[call.id]):
+                self._emit(event, data)
+
+
+def run_chat(llm: ModuleType, message: str, version: str, emit: Emit) -> None:
+    """Döngüyü çalıştırır ve olayları emit'e verir; thread havuzunda çalışır.
+
+    Son olay done ya da error'dur; hata ayrıntısı yalnızca sunucu loguna yazılır.
+    """
+    client = EventingClient(llm.client, emit)
     try:
-        async with llm.async_client.messages.stream(
-            model=llm.MODEL,
-            max_tokens=MAX_TOKENS,
-            system=system,
-            messages=[{"role": "user", "content": message}],
-        ) as stream:
-            async for text in stream.text_stream:
-                yield sse_event("delta", {"text": text})
-            final = await stream.get_final_message()
+        result = run_agent(message, client=client, instruction_version=version)
     except anthropic.APIError:
         logger.exception("Claude çağrısı başarısız oldu")
-        yield sse_event("error", {"message": ERROR_MESSAGE})
+        emit("error", {"code": "model_error", "message": ERROR_MESSAGE})
+        return
+    except Exception:
+        logger.exception("Agent döngüsü beklenmedik şekilde kesildi")
+        emit("error", {"code": "model_error", "message": ERROR_MESSAGE})
         return
 
-    yield sse_event("done", {"stop_reason": final.stop_reason})
+    # Kesik ya da ara metin operatöre gitmez; metin yalnızca tamam'da akar.
+    if result.status == "tamam":
+        if result.text:
+            emit("text_delta", {"text": result.text})
+    else:
+        emit("error", {"code": result.status, "message": result.reason})
+    emit(
+        "done",
+        {
+            "status": result.status,
+            "reason": result.reason,
+            "turns": len(result.turns),
+            "instruction": result.instruction.model_dump(),
+        },
+    )
+
+
+async def stream_chat(
+    llm: ModuleType, message: str, version: str
+) -> AsyncIterator[str]:
+    """Döngüyü olay döngüsünü bloklamadan çalıştırır, olayları üretildikçe yazar."""
+    loop = asyncio.get_running_loop()
+    queue: asyncio.Queue[tuple[str, dict] | None] = asyncio.Queue()
+
+    def emit(event: str, data: dict) -> None:
+        loop.call_soon_threadsafe(queue.put_nowait, (event, data))
+
+    def work() -> None:
+        try:
+            run_chat(llm, message, version, emit)
+        finally:
+            loop.call_soon_threadsafe(queue.put_nowait, None)
+
+    task = asyncio.ensure_future(run_in_threadpool(work))
+    while (item := await queue.get()) is not None:
+        yield sse_event(*item)
+    await task
 
 
 @app.get("/health")
@@ -145,16 +220,17 @@ async def chat(request: ChatRequest) -> StreamingResponse:
         logger.exception("LLM ayarları yüklenemedi")
         raise HTTPException(status_code=503, detail=CONFIG_ERROR_MESSAGE) from None
     # Talimat, .env yüklendikten sonra COPILOT_INSTRUCTION'a göre okunur; bilinmeyen
-    # sürüm de bir ayar hatasıdır.
+    # sürüm de bir ayar hatasıdır. Döngü aynı sürümle çalışır.
+    version = instructions.default_version()
     try:
-        system = instructions.load(instructions.default_version())
+        instructions.load(version)
     except ValueError:
         logger.exception("Talimat sürümü yüklenemedi")
         raise HTTPException(status_code=503, detail=CONFIG_ERROR_MESSAGE) from None
 
     # text/event-stream için Starlette charset=utf-8'i başlığa kendisi ekler.
     return StreamingResponse(
-        stream_reply(llm, system, request.message),
+        stream_chat(llm, request.message, version),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache"},
     )
