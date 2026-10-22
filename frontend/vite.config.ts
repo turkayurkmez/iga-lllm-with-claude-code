@@ -17,6 +17,7 @@ export default defineConfig(({ mode }) => {
     server: {
       proxy: {
         '/chat': backend,
+        '/feedback': backend,
         '/health': backend,
         '/tools': backend,
       },

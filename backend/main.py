@@ -14,10 +14,10 @@ from typing import Any
 import anthropic
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import Response, StreamingResponse
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from starlette.concurrency import run_in_threadpool
 
-from backend import instructions
+from backend import audit, instructions
 from backend.agent import run_agent
 from backend.cards import CardBuilder
 from backend.tools import run_tool, tool_definitions
@@ -29,6 +29,9 @@ logger = logging.getLogger(__name__)
 ERROR_MESSAGE = "Yanıt üretilirken bir hata oluştu. Lütfen daha sonra tekrar deneyin."
 CONFIG_ERROR_MESSAGE = (
     "Sohbet servisi şu anda yapılandırılmamış. Lütfen yöneticinize başvurun."
+)
+FEEDBACK_ERROR_MESSAGE = (
+    "Geri bildirim kaydedilemedi. Lütfen daha sonra tekrar deneyin."
 )
 INVALID_JSON_MESSAGE = "İstek gövdesi geçerli JSON değil."
 UNEXPECTED_MESSAGE = "Beklenmeyen bir hata oluştu."
@@ -66,6 +69,12 @@ class ChatRequest(BaseModel):
         if not value:
             raise ValueError("Mesaj boş olamaz.")
         return value
+
+
+class FeedbackRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    audit_id: str = Field(pattern=r"^[0-9a-f]{32}$")
 
 
 def sse_event(event: str, data: dict) -> str:
@@ -113,22 +122,34 @@ class EventingClient:
                 self._emit(event, data)
 
 
-def run_chat(llm: ModuleType, message: str, version: str, emit: Emit) -> None:
+def run_chat(
+    llm: ModuleType, message: str, version: str, emit: Emit, audit_id: str
+) -> dict:
     """Döngüyü çalıştırır ve olayları emit'e verir; thread havuzunda çalışır.
 
     Son olay done ya da error'dur; hata ayrıntısı yalnızca sunucu loguna yazılır.
+    Audit satırının sonuç alanlarını döndürür; satırı ChatStream akış bitince yazar.
     """
     client = EventingClient(llm.client, emit)
     try:
         result = run_agent(message, client=client, instruction_version=version)
-    except anthropic.APIError:
-        logger.exception("Claude çağrısı başarısız oldu")
+    except Exception as exc:
+        if isinstance(exc, anthropic.APIError):
+            logger.exception("Claude çağrısı başarısız oldu")
+        else:
+            logger.exception("Agent döngüsü beklenmedik şekilde kesildi")
         emit("error", {"code": "model_error", "message": ERROR_MESSAGE})
-        return
-    except Exception:
-        logger.exception("Agent döngüsü beklenmedik şekilde kesildi")
-        emit("error", {"code": "model_error", "message": ERROR_MESSAGE})
-        return
+        # Sonuç yok: talimat istekte çözülen sürümden kaydedilir (docs/audit.md).
+        return {
+            "status": "model_error",
+            "reason": ERROR_MESSAGE,
+            "model": llm.MODEL,
+            "instruction": {
+                "name": version,
+                "version": instructions.VERSIONS[version],
+                "summary": instructions.summary(instructions.load(version)),
+            },
+        }
 
     # Kesik ya da ara metin operatöre gitmez; metin yalnızca tamam'da akar.
     if result.status == "tamam":
@@ -143,30 +164,106 @@ def run_chat(llm: ModuleType, message: str, version: str, emit: Emit) -> None:
             "reason": result.reason,
             "turns": len(result.turns),
             "instruction": result.instruction.model_dump(),
+            "audit_id": audit_id,
         },
     )
+    return {
+        "status": result.status,
+        "reason": result.reason,
+        "model": llm.MODEL,
+        "instruction": result.instruction.model_dump(),
+        "result": result,
+    }
 
 
-async def stream_chat(
-    llm: ModuleType, message: str, version: str
-) -> AsyncIterator[str]:
-    """Döngüyü olay döngüsünü bloklamadan çalıştırır, olayları üretildikçe yazar."""
-    loop = asyncio.get_running_loop()
-    queue: asyncio.Queue[tuple[str, dict] | None] = asyncio.Queue()
+class ChatStream:
+    """Bir /chat isteğinin akışı ve tek audit satırı (docs/audit.md › /chat).
 
-    def emit(event: str, data: dict) -> None:
-        loop.call_soon_threadsafe(queue.put_nowait, (event, data))
+    Satır akış bitince bir kez yazılır: son olay istemciye iletildiyse hemen,
+    istemci akışı kestiyse döngü (thread'de sürer) bittiğinde.
+    """
 
-    def work() -> None:
+    def __init__(self, llm: ModuleType, message: str, version: str):
+        self._llm = llm
+        self._message = message
+        self._version = version
+        self.audit_id = audit.new_id()
+        self._chips: list[dict] = []
+        self._outcome: dict | None = None
+        self._task: asyncio.Future | None = None
+        self._delivered = False
+
+    async def events(self) -> AsyncIterator[str]:
+        """Döngüyü olay döngüsünü bloklamadan çalıştırır, olayları üretildikçe yazar."""
+        loop = asyncio.get_running_loop()
+        queue: asyncio.Queue[tuple[str, dict] | None] = asyncio.Queue()
+
+        def emit(event: str, data: dict) -> None:
+            if event == "source_chip":
+                self._chips.append(data)
+            loop.call_soon_threadsafe(queue.put_nowait, (event, data))
+
+        def work() -> None:
+            try:
+                self._outcome = run_chat(
+                    self._llm, self._message, self._version, emit, self.audit_id
+                )
+            finally:
+                loop.call_soon_threadsafe(queue.put_nowait, None)
+
+        self._task = asyncio.ensure_future(run_in_threadpool(work))
+        while (item := await queue.get()) is not None:
+            yield sse_event(*item)
+        await self._task
+        # Üreteç son yield'den ancak o olay gönderildikten sonra döner.
+        self._delivered = True
+
+    def finish(self) -> None:
+        """Yanıt bittiğinde çağrılır; kesilme ve normal bitiş burada ayrılır."""
+        if self._delivered:
+            self._record(client_disconnected=False)
+        elif self._task is not None:
+            # Kesilmede döngü durdurulmaz; satır döngü bitince yazılır.
+            self._task.add_done_callback(
+                lambda _: self._record(client_disconnected=True)
+            )
+
+    def _record(self, *, client_disconnected: bool) -> None:
+        # Yazım hatası akışı etkilemez; ayrıntı yalnızca sunucu loguna yazılır.
         try:
-            run_chat(llm, message, version, emit)
-        finally:
-            loop.call_soon_threadsafe(queue.put_nowait, None)
+            if self._outcome is None:
+                raise RuntimeError("Döngü sonuç üretmeden bitti.")
+            audit.write_question(
+                self._message,
+                audit_id=self.audit_id,
+                chips=self._chips,
+                client_disconnected=client_disconnected,
+                **self._outcome,
+            )
+        except Exception:
+            logger.exception("Audit kaydı yazılamadı")
 
-    task = asyncio.ensure_future(run_in_threadpool(work))
-    while (item := await queue.get()) is not None:
-        yield sse_event(*item)
-    await task
+
+class ChatResponse(StreamingResponse):
+    """Akışın nasıl bittiğini (tamamlandı ya da istemci kesti) ChatStream'e bildirir.
+
+    ASGI 2.4'te gönderim hatasında üreteç kapatılmadan bırakılır; bu yüzden bitiş
+    üretecin finally'sine değil yanıtın kendisine bağlanır.
+    """
+
+    def __init__(self, stream: ChatStream):
+        super().__init__(
+            stream.events(),
+            media_type="text/event-stream",
+            headers={"Cache-Control": "no-cache"},
+        )
+        self._stream = stream
+
+    async def __call__(self, scope: Any, receive: Any, send: Any) -> None:
+        try:
+            await super().__call__(scope, receive, send)
+        finally:
+            self._stream.finish()
 
 
 @app.get("/health")
@@ -211,6 +308,20 @@ async def call_tool(name: str, request: Request) -> Response:
         return json_response({"detail": UNEXPECTED_MESSAGE}, 500)
 
 
+@app.post("/feedback")
+async def feedback(request: FeedbackRequest) -> Response:
+    """Thumbs down: ayrı bir feedback satırı yazar (docs/audit.md › POST /feedback).
+
+    backend.llm yüklenmez; audit_id'nin bir soruya ait olduğu denetlenmez.
+    """
+    try:
+        await run_in_threadpool(audit.write_feedback, request.audit_id)
+    except Exception:
+        logger.exception("Geri bildirim yazılamadı")
+        return json_response({"detail": FEEDBACK_ERROR_MESSAGE}, 503)
+    return Response(status_code=204)
+
+
 @app.post("/chat")
 async def chat(request: ChatRequest) -> StreamingResponse:
     # ConfigError, backend.llm import edilemeden yakalanamaz; RuntimeError onun taban sınıfıdır.
@@ -229,8 +340,4 @@ async def chat(request: ChatRequest) -> StreamingResponse:
         raise HTTPException(status_code=503, detail=CONFIG_ERROR_MESSAGE) from None
 
     # text/event-stream için Starlette charset=utf-8'i başlığa kendisi ekler.
-    return StreamingResponse(
-        stream_chat(llm, request.message, version),
-        media_type="text/event-stream",
-        headers={"Cache-Control": "no-cache"},
-    )
+    return ChatResponse(ChatStream(llm, request.message, version))

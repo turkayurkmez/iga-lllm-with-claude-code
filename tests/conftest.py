@@ -57,6 +57,18 @@ def pytest_terminal_summary(terminalreporter, exitstatus, config) -> None:
     terminalreporter.write_line(f"talimat: {name}.md (Özet: {digest[:12]})")
 
 
+@pytest.fixture(autouse=True)
+def audit_dir(tmp_path, monkeypatch) -> Path:
+    """Her testin kendi audit klasörü (docs/audit.md › Kurallar 7).
+
+    /chat'i çağıran her test buraya yazar; repo'daki logs/audit'e hiçbir test yazmaz.
+    Klasör oluşturulmaz: ilk yazımda oluşturulması da sözleşmedir.
+    """
+    path = tmp_path / "audit"
+    monkeypatch.setenv("COPILOT_AUDIT_DIR", str(path))
+    return path
+
+
 @pytest.fixture
 def instruction_name(pytestconfig) -> str:
     """--instruction ile seçilen talimat sürümünün adı (ör. "v1")."""

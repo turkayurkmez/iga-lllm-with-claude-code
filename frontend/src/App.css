@@ -243,6 +243,28 @@ ol.array {
   color: var(--muted);
 }
 
+.feedback {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 0;
+}
+
+.feedback .notice {
+  margin: 0;
+}
+
+button.thumbs-down {
+  display: inline-flex;
+  padding: 4px 8px;
+  color: var(--muted);
+}
+
+button.thumbs-down:disabled {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
 .chips {
   display: flex;
   flex-wrap: wrap;

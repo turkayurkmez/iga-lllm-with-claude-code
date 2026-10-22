@@ -8,6 +8,7 @@ AOCC Copilot: havalimanı Operasyon Kontrol Merkezi (AOCC) personeli için Claud
 
 - `backend/llm.py`: tek config ve istemci noktası. `.env`'yi import anında yükler (`scripts/` modül düzeyinde `client` import ettiği için böyle kalmalı); `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL`, `ANTHROPIC_TEMP_MODEL` eksik/boşsa Türkçe `ConfigError` fırlatır, yani bu modülü import eden her şey geçerli bir `.env` ister. Ortamdaki değişkenler `.env`'nin önüne geçer. `client` (senkron) script'ler, `async_client` FastAPI içindir.
 - `backend/main.py`: `GET /health`, `POST /chat` (`{"message": "..."}`; boş/boşluk mesaj 422). `backend.llm`'i modül düzeyinde import etmez, ilk `/chat`'te `load_llm()` ile yükler; böylece `/health` API anahtarı olmadan çalışır, ayar eksikse `/chat` 503 + genel mesaj döner. `/chat` yanıtı SSE akışıdır, sözleşmesi `docs/chat.md` (testleri `tests/test_chat.py`): `run_agent`'ı thread havuzunda, model çağrılarını saran `EventingClient` ile çalıştırır; olaylar `tool_call`, `source_chip`/`kpi_card`/`selection_card` (zarftan `backend/cards.py` kurar, yorumlamaz), yalnızca `tamam`'da `text_delta`, sonda `done` ya da `error`. Frontend'de `chat.ts` olayları doğrulayıp ayrıştırır, `Chat.tsx` cevap, KPI, seçim kartı ve kaynak çiplerini `docs/chat.md` › Arayüz kuralları'na göre çizer. `GET /tools` ve `POST /tools/{ad}` tool'ları HTTP'ye açar (sözleşme `docs/http.md`, testleri `tests/test_http.py`): gövde `run_tool`'a olduğu gibi gider, zarf değiştirilmeden döner, durum kodu yalnızca `error.code`'dan (`STATUS_BY_CODE`) seçilir. Yanıtlar `json_response` ile yazılır; FastAPI'nin `JSONResponse`'u charset eklemez ve `ensure_ascii=True` yazar.
+- `backend/audit.py`: her `/chat` sorusu için tek `question` satırı, `POST /feedback` (`{"audit_id"}`, 204) için ayrı `feedback` satırı; `COPILOT_AUDIT_DIR` (boşsa `logs/audit`) altında günlük JSONL, yalnızca sona ekleme. Tool `value`'su kayda girmez. Sözleşme `docs/audit.md`, testleri `tests/test_audit.py`; `tests/conftest.py` › `audit_dir` her testi `tmp_path`'e yönlendirir, testler gerçek klasöre yazmaz. Satır akış bitince `main.ChatStream`/`ChatResponse` ile tek kez, cevap ve `chips` ile yazılır; istemci akışı keserse döngü sürer, satır sonunda `client_disconnected: true` ile yazılır (ASGI 2.4'te üreteç kapatılmadığı için bitiş yanıt düzeyinde yakalanır). Kesme testleri TestClient'la yapılamaz, uygulama ASGI ile sürülür (`test_audit.py` › `drive_chat`). `done` olayı her zaman `audit_id` taşır; `Chat.tsx` thumbs down düğmesini yalnızca `tamam` ve dolu `audit_id`'de gösterir, `chat.ts` › `sendFeedback` yalnızca 204'ü başarı sayar. Elle denemede `COPILOT_AUDIT_DIR`'i scratchpad'e ver; vermezsen kayıt gerçek `logs/audit`'e gider.
 - `docker-compose.yml` + `backend/Dockerfile`: backend `db` sağlıklı olunca başlar ama veritabanına bağlanmaz. `.env` imaja girmez, `env_file` ile verilir; `db` yalnızca `POSTGRES_PASSWORD`'ü alır.
 - `db/schema.sql`: spec §6 sözleşmesi; alan adları birebir korunur. Şema yalnızca **boş volume'da** yüklenir: şemayı değiştirdikten sonra `docker compose down -v` gerekir ve bu veritabanını sıfırlar (bilinçli davranış).
 - `synth/generator.py`: `python -m synth.generator --seed N --date YYYY-MM-DD --out dosya.json`. Belirlenimci: rastgelelik yalnızca `random.Random(seed)`'den; sistem saati, `set` sırası ve `hash()` kullanılmaz; çıktı `newline="\n"` ile yazılır. §9 sabit kayıtları (`TC-LSD`, `TK2344`/`TK2345`) her seed/tarihte aynıdır. Sözleşme `tests/test_generator.py`'dedir.
@@ -59,6 +60,9 @@ $env:PYTHONIOENCODING="utf-8"; .\.venv\Scripts\python.exe scripts\first_call.py
 $env:PYTHONIOENCODING="utf-8"; .\.venv\Scripts\python.exe scripts\agent_run.py --vaka hepsi 2>$null   # API'siz; 2>$null tool katmanının şema hatası traceback'ini gizler
 $env:PYTHONIOENCODING="utf-8"; .\.venv\Scripts\python.exe scripts\agent_run.py "Bugün kaç uçuş var?"  # ücretli
 
+# Audit kayıtları (salt okur; docs/audit.md › Okuma scripti)
+$env:PYTHONIOENCODING="utf-8"; .\.venv\Scripts\python.exe scripts\audit_report.py [--id <audit_id ya da ≥6 karakter önek> | --tarih 2026-10-20]
+
 # Lint / format
 .\.venv\Scripts\python.exe -m ruff check backend scripts synth tests experiments; .\.venv\Scripts\python.exe -m ruff format backend scripts synth tests experiments
 
@@ -76,6 +80,7 @@ git -c core.autocrlf=false diff --no-index --stat synth\out\2026-10-20.json synt
 $p = Start-Process .\.venv\Scripts\python.exe -ArgumentList "-m uvicorn backend.main:app --port 8765" -PassThru -WindowStyle Hidden
 try { <for döngüsüyle /health yokla; istekleri at> } finally { Stop-Process -Id $p.Id -Force }
 # Vite ile birlikte (proxy testi): $env:BACKEND_URL="http://127.0.0.1:8765"; $v = Start-Process cmd.exe -ArgumentList "/c npx vite --port 5199 --strictPort" -WorkingDirectory "$PWD\frontend" -PassThru -WindowStyle Hidden
+# Vite yalnızca ::1'i dinler; proxy isteklerini http://localhost:5199'a at (127.0.0.1 → HTTP 000)
 # kapatırken: taskkill /PID $v.Id /T /F   (yalnızca başlattığın ağaç; Stop-Process node'u öksüz bırakır)
 
 # Testler (tümü; tek test örneği)
@@ -89,6 +94,8 @@ try { <for döngüsüyle /health yokla; istekleri at> } finally { Stop-Process -
 - Model adı her zaman `backend.llm.MODEL` / `TEMP_MODEL`'den alınır.
 - Tool tanımlarında açıklama "ne döndürür / ne zaman kullanılır / ne zaman KULLANILMAZ" içerir, enum ve örnek değer verilir; belirsiz açıklamada model birden fazla tool'u birlikte çağırıyor.
 - Kontrat şemalarında her object `additionalProperties: false`; `minLength`/`maxLength`/`minimum`/`maximum`/`multipleOf` kullanılmaz, biçim `pattern` ile denetlenir. Kontrat değişince `tool_definitions` testi kontratla birebir karşılaştırır.
+- `scripts/` altındaki bir script'i test ederken `importlib.util.spec_from_file_location` ile yükle, `main(argv) -> int`'i süreç içinde çağır, çıktıyı `capsys` ile oku; argparse kullanım hatası `SystemExit(2)` olarak gelir.
+- Audit satırına alan eklenince eski satırlarda o alan yoktur; okuyan kod `record.get(...)` kullanır, eksik alanı boş değer saymaz.
 - Repo dışındaki (tmp) bir test dosyasını pytest'le koşarken `--rootdir`'i dosyanın klasörüne ver; verilmezse rootdir `C:\Users\turka` olur ve tek test ~15 sn sürer.
 - `.claude/agents/` altına yeni eklenen subagent, oturum yeniden başlatılana kadar Agent aracında görünmez (`/agents` sihirbazı yok).
 - Frontend'de `erasableSyntaxOnly` açık: TS `enum` yerine `as const` nesne + aynı adla union tip kullanılır (`src/envelope.ts`); yalnızca tip içeren `namespace` serbest.

@@ -12,6 +12,7 @@ import asyncio
 import copy
 import importlib
 import json
+import re
 from pathlib import Path
 
 import anthropic
@@ -445,7 +446,11 @@ def test_olaylar_agent_sonucuyla_tutarli(chat, responses, status):
         if call.executed
     ]
     assert of_type(events, "tool_call") == executed
-    assert of_type(events, "done") == [
+    done = of_type(events, "done")
+    assert len(done) == 1
+    # audit_id rastgeledir; biçimi ve kayıtla eşleşmesi tests/test_audit.py'de sınanır.
+    assert re.fullmatch(r"[0-9a-f]{32}", done[0].pop("audit_id", None) or "")
+    assert done == [
         {
             "status": result.status,
             "reason": result.reason,

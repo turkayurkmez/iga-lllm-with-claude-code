@@ -27,15 +27,17 @@ Alan sırası tablodaki gibidir. Bütün alanlar her satırda bulunur; anlamı o
 |---|---|---|
 | `type` | `"question"` | Satır türü. |
 | `audit_id` | metin | Bu sorunun kimliği: 32 karakter küçük harf hex (`uuid4().hex`). Geri bildirim bu kimlikle bağlanır. |
-| `ts` | ISO 8601, `+03:00` | Satırın yazıldığı an (döngü bittikten sonra). |
-| `question` | metin | Operatörün sorusu, `/chat` gövdesindeki `message`, olduğu gibi. Kırpılmaz, kısaltılmaz. |
+| `ts` | ISO 8601, `+03:00` | Satırın yazıldığı an (akış bittikten sonra; bkz. Uçlar). |
+| `question` | metin | Operatörün sorusu: `/chat` gövdesindeki `message`'ın baştaki ve sondaki boşluğu silinmiş hali (`ChatRequest` doğrulayıcısı; döngüye giden metnin aynısı). Başka değişiklik, kısaltma yoktur. |
 | `status` | metin | `AgentResult.status` (beş değerden biri; `docs/agent.md` › Durumlar) ya da model çağrısı / beklenmeyen hata için `model_error`. |
 | `reason` | metin ya da `null` | `AgentResult.reason`. `tamam`'da `null`; `model_error`'da `ERROR_MESSAGE` (`backend/main.py`). |
-| `answer` | metin ya da `null` | Yalnızca `status` `tamam` iken `AgentResult.text` (operatöre giden `text_delta`'ların birleşimi). Diğer durumlarda `null`; kesik/ara metin kayda girmez (`docs/chat.md` › Kod garantileri 8). |
+| `answer` | metin ya da `null` | Yalnızca `status` `tamam` iken `AgentResult.text` (akışa giden `text_delta`'ların birleşimi). İstemci akışı kesmiş olsa da yazılır. Diğer durumlarda `null`; kesik/ara metin kayda girmez (`docs/chat.md` › Kod garantileri 8). |
 | `model` | metin ya da `null` | `backend.llm.MODEL`. Kodda sabit yazılmaz. |
 | `instruction` | nesne ya da `null` | `AgentResult.instruction` (`name`, `version`, `summary`) olduğu gibi. `model_error`'da sonuç olmadığından `name` ve `version` istekte çözülen sürümden, `summary` yüklenen metinden doldurulur. |
 | `turns` | tamsayı ya da `null` | `len(AgentResult.turns)`. `model_error`'da `null` (turlar döngüyle birlikte kaybolur; `docs/agent.md` › Kurallar). |
 | `tool_calls` | liste | Aşağıdaki öğelerden oluşur; `AgentResult.turns[].tool_calls[]` sırasıyla, `executed: false` olanlar dahil. Tool çağrısı yoksa ya da `model_error`'da `[]`. |
+| `chips` | liste | Döngünün ürettiği `source_chip` olaylarının `data`'sı (`tool`, `source`, `as_of`, `stale`, `error_code`), üretildiği sırayla ve olduğu gibi (`docs/chat.md` › Kod garantileri 3'teki tekilleştirmeyle). İstemci akışı kesmiş olsa da döngünün ürettiği çiplerin hepsi. Çip yoksa `[]`. `kpi_card` ve `selection_card` kayda girmez (`value` taşırlar). |
+| `client_disconnected` | mantıksal | İstemci akış bitmeden bağlantıyı kestiyse `true`: son olay (`done` ya da `error`) istemciye iletilemedi. Akış sonuna kadar iletildiyse `false`. |
 
 `tool_calls` öğesi:
 
@@ -68,8 +70,10 @@ Serbest metin (not, açıklama) alanı yoktur.
 ### `/chat` değişikliği
 
 - `done` olayının `data`'sına `audit_id` eklenir: `{"status": ..., "reason": ..., "turns": ..., "instruction": {...}, "audit_id": "..."}`. `docs/chat.md` › Olay tipleri bu iş yapılırken birlikte güncellenir; `chat.ts` doğrulaması da.
-- `question` satırı döngü bittikten sonra, `done` (ya da `model_error`'daki son `error`) olayı yazılmadan **önce** yazılır. Böylece istemci kimliği aldığında satır dosyadadır.
-- Kayıt yazılamazsa (izin, disk) hata `logger.exception` ile loglanır, akış etkilenmez; `done`'da `audit_id: null` gider ve arayüz thumbs down göstermez.
+- `audit_id` akış başlarken üretilir; `done`'da her zaman dolu gider.
+- `question` satırı **akış bittikten sonra** tek kez yazılır: son olay (`done` ya da `model_error`'daki `error`) istemciye iletildikten sonra, cevap ve çiplerle. Son olay yazılırken satır henüz dosyada değildir.
+- **İstemci akışı yarıda keserse** döngü durdurulmaz (`docs/agent.md` › Kapsam dışı); döngü bitince satır `client_disconnected: true` ile yine tek kez yazılır. Kesilme iki yoldan anlaşılır: sunucu `http.disconnect` bildirir (ASGI < 2.4) ya da olay gönderimi `OSError` verir (ASGI 2.4, uvicorn).
+- Kayıt yazılamazsa (izin, disk) hata `logger.exception` ile loglanır; akış etkilenmez (zaten bitmiştir). `done`'daki `audit_id` yetim kalır; buna verilen geri bildirim eşleşmeyen satır olur.
 - `model_error`'da `done` olmadığından `audit_id` istemciye gitmez; satır yine yazılır.
 - Akış başlamadan reddedilen istekler (`422`, `503`; `docs/chat.md` › Uç) kayıt üretmez: soru döngüye hiç girmemiştir.
 
@@ -90,8 +94,8 @@ Gövde `{"audit_id": "..."}`; ek alan reddedilir.
 
 ## Kurallar
 
-1. **Tool `value`'su kayda girmez.** Zarfın yalnızca `source`, `as_of`, `stale`, `tool_version`, `author` ve `error.code` alanları taşınır. `value`, `filters`, `error.message` ve `selection_card` adayları (`value` dizisidir) yazılmaz. Operatif değerin kendisi kaynakta ve cevap metnindedir; kayıt yalnızca nereden geldiğini gösterir.
-2. **Bir soru, bir satır.** Her `/chat` isteği (akış başladıysa) tam olarak bir `question` satırı üretir; beş bitiş durumunda ve `model_error`'da. Geri bildirim bu satırı değiştirmez, ayrı satırdır.
+1. **Tool `value`'su kayda girmez.** Zarfın yalnızca `source`, `as_of`, `stale`, `tool_version`, `author` ve `error.code` alanları taşınır (çiplerde de aynı alanlar). `value`, `filters`, `error.message`, `kpi_card` değerleri ve `selection_card` adayları (`value` dizisidir) yazılmaz. Operatif değerin kendisi kaynakta ve cevap metnindedir; kayıt yalnızca nereden geldiğini gösterir.
+2. **Bir soru, bir satır.** Her `/chat` isteği (akış başladıysa) tam olarak bir `question` satırı üretir; beş bitiş durumunda, `model_error`'da ve istemci akışı kestiğinde. Geri bildirim bu satırı değiştirmez, ayrı satırdır.
 3. **Kayıt yorumlamaz.** Alanlar `AgentResult`'tan ve zarftan olduğu gibi taşınır; hesap, özet, kısaltma, saat dönüşümü yoktur.
 4. **Hata ayrıntısı girmez.** Exception metni, yığın izi, API yanıtı, request id ve API anahtarı hiçbir satıra yazılmaz (CLAUDE.md › Yasaklar). `model_error`'da `reason` genel `ERROR_MESSAGE`'dır.
 5. **Kayıt akışı bozmaz.** Audit yazımı olay sırasını ve içeriğini değiştirmez; tek fark `done`'daki `audit_id` alanıdır. Yazım hatası akışı kesmez.
@@ -100,7 +104,7 @@ Gövde `{"audit_id": "..."}`; ek alan reddedilir.
 
 ## Arayüz kuralları
 
-1. Thumbs down ikonu yalnızca `done.status` `tamam` ve `audit_id` `null` değilken, cevabın altında gösterilir. `error` ile biten akışta gösterilmez.
+1. Thumbs down ikonu yalnızca `done.status` `tamam` iken (ve `audit_id` doluyken; eski sunucuya karşı korunma), cevabın altında gösterilir. `error` ile biten akışta gösterilmez.
 2. Tek tıkla `POST /feedback` gönderilir; not ya da açıklama istenmez.
 3. Gönderim sonrası ikon devre dışı kalır ve "Geri bildiriminiz alındı." gösterilir; geri alma yoktur. Başarısızsa "Geri bildirim gönderilemedi." gösterilir, ikon yeniden tıklanabilir.
 4. Olumlu (thumbs up) geri bildirim yoktur.
@@ -116,11 +120,31 @@ Gövde `{"audit_id": "..."}`; ek alan reddedilir.
  "instruction": {"name": "v1", "version": "1.0.0", "summary": "050490f4…27e5"}, "turns": 2,
  "tool_calls": [{"turn": 1, "name": "get_flight_summary", "input": {"direction": "all"}, "executed": true,
    "source": "data/referans/seed42-2026-10-20.json", "as_of": "2026-10-20T16:22:00+03:00", "stale": false,
-   "tool_version": "1.0.0", "author": "tool", "error_code": null}]}
+   "tool_version": "1.0.0", "author": "tool", "error_code": null}],
+ "chips": [{"tool": "get_flight_summary", "source": "data/referans/seed42-2026-10-20.json",
+   "as_of": "2026-10-20T16:22:00+03:00", "stale": false, "error_code": null}],
+ "client_disconnected": false}
 {"type": "feedback", "audit_id": "3f9c2a7e4b1d4c8e9a0f6b2d7e5c1a3b", "ts": "2026-10-20T16:23:10+03:00", "rating": "down"}
 ```
 
 Satırda `600`, `4`, `115` yalnızca modelin cevap metninde (`answer`) geçer; zarfın `value`'su yoktur.
+
+## Okuma scripti
+
+`scripts/audit_report.py` kayıtları salt okur; dosyaları değiştirmez, modele ya da API'ye gitmez. Klasör `backend.audit.audit_dir()`'dir (`COPILOT_AUDIT_DIR`, boşsa `logs/audit`). Çıktı Türkçe düz metindir; `PYTHONIOENCODING=utf-8` ile çalıştırılır. Testleri `tests/test_audit_report.py`.
+
+| Çağrı | Ne gösterir |
+|---|---|
+| (parametresiz) | Tüm günlerden `ts`'e göre en yeni 5 `question`. Bu 5'in içinde thumbs down alanlar önce, sonra kalanlar; ikisi de yeniden eskiye. Her soru tek satır: tarih ve saat, `audit_id`'nin ilk 8 karakteri, `status`, olumsuzsa `[olumsuz]`, soru, cevap (80 karakteri aşarsa kısaltılıp `…` eklenir; `null` ise `(cevap yok)`). |
+| `--id <kimlik>` | Bir sorunun yolculuğu: `audit_id`, `ts`, soru, talimat (`name`, `version`) ve model, tur tur tool çağrıları (ad, `input`, çalıştı mı, `source`, `as_of`, `stale`, `error_code`), çipler, `status` ve `reason`, tam cevap, istemcinin akışı kesip kesmediği, geri bildirimler (`ts`'leriyle; yoksa `Geri bildirim yok.`). Kimlik tam `audit_id` ya da en az 6 karakterlik benzersiz önekidir. |
+| `--tarih YYYY-MM-DD` | O günün dosyasındaki bütün sorular, thumbs down alanlar önce (yeniden eskiye), sonra kalanlar (yeniden eskiye). Her biri soru → cevap → geri bildirim. |
+
+- Geri bildirim, hangi günün dosyasında olursa olsun `audit_id` ile eşleştirilir; ertesi gün verilen de sayılır. Aynı soruya birden çok geri bildirim varsa hepsi gösterilir, öncelik için bir tanesi yeter. Hiçbir soruya karşılık gelmeyen geri bildirim gösterilmez.
+- `--id` ile `--tarih` birlikte verilemez (argparse kullanım hatası, çıkış kodu 2).
+- Kayıt yoksa (klasör boş ya da o günün dosyası yok) `Kayıt yok.` yazılır, çıkış kodu 0.
+- Hata durumunda stderr'e `Hata: ...` yazılır, stdout'a bir şey yazılmaz, çıkış kodu 1: klasör yok, tarih `YYYY-MM-DD` değil, kimlik 6 karakterden kısa ya da hex değil, kimlik hiçbir soruya uymuyor, önek birden çok soruya uyuyor (uyan kimliklerin hepsi stderr'de listelenir).
+- Okunamayan satır (geçersiz JSON) atlanır; stderr'e `Uyarı: <dosya>:<satır no> okunamadı.` yazılır, diğer satırlar gösterilir.
+- Yalnızca kayıtta olan alanlar gösterilir; script hesap yapmaz, değer türetmez.
 
 ## Kapsam dışı
 

@@ -32,13 +32,13 @@ Alan adları `AgentResult` ile aynıdır (`docs/agent.md` › Sonuç). Tablo kap
 | `selection_card` | Zarf `AMBIGUOUS_ENTITY` ise | `{"query": "...", "message": "...", "candidates": [<aday>, ...], "source": "...", "as_of": "..."}` |
 | `text_delta` | Döngü `tamam` ile bitince, nihai cevabın metni | `{"text": "..."}` |
 | `error` | Döngü `tamam` dışı bir durumla bitti ya da model çağrısı başarısız | `{"code": "...", "message": "..."}` |
-| `done` | Döngü beş bitiş durumundan biriyle bitti | `{"status": "...", "reason": null, "turns": 0, "instruction": {"name": "...", "version": "...", "summary": "..."}}` |
+| `done` | Döngü beş bitiş durumundan biriyle bitti | `{"status": "...", "reason": null, "turns": 0, "instruction": {"name": "...", "version": "...", "summary": "..."}, "audit_id": "..."}` |
 
 - `tool_call.id`, `name`, `input`: `turns[].tool_calls[]`'taki aynı alanlar, olduğu gibi.
 - `selection_card`: `query` zarfın `filters.query`'si, `message` `error.message`'ı, `candidates` `value` dizisinin kendisi (`resolve_flight_identity` › `value_schema`, `flight_id`'ye göre artan).
 - `kpi_card.items`: `value`'daki tamsayı alanlar, kontrattaki `value_schema` sırasıyla (`total`, `cancelled`, `delayed`); `description` kontrattaki alan açıklamasıdır (`backend/tools/contracts/get_flight_summary.json`).
 - `error`: döngü durumlarında `code` `status`'tur, `message` `AgentResult.reason`'dır (`docs/agent.md` › Durumlar'daki metin). Model çağrısı başarısızsa `code` `model_error`, `message` `ERROR_MESSAGE`'dır (`backend/main.py`).
-- `done`: `status`, `reason`, `instruction` `AgentResult`'tan; `turns` `len(AgentResult.turns)`.
+- `done`: `status`, `reason`, `instruction` `AgentResult`'tan; `turns` `len(AgentResult.turns)`; `audit_id` bu sorunun audit satırının kimliği; satır akış bittikten sonra yazılır (`docs/audit.md`).
 
 ## Sıra
 

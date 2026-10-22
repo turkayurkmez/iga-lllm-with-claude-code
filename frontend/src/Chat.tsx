@@ -6,6 +6,7 @@
 import { useState, type FormEvent } from 'react'
 import { Link } from 'react-router'
 import {
+  sendFeedback,
   streamChat,
   type Candidate,
   type Done,
@@ -25,7 +26,11 @@ interface Turn {
   done: Done | null
   error: string | null
   pending: boolean
+  feedback: FeedbackState
 }
+
+// Geri bildirim durumu: gönderilince geri alınamaz, başarısızsa yeniden denenebilir.
+type FeedbackState = 'idle' | 'sending' | 'sent' | 'failed'
 
 const CANDIDATE_COLUMNS = ['flight_no', 'callsign', 'registration', 'movement_type'] as const
 const ISO_TIME = /^\d{4}-\d{2}-\d{2}T(\d{2}:\d{2})/
@@ -57,6 +62,35 @@ function Chips({ chips }: { chips: SourceChip[] }) {
         </li>
       ))}
     </ul>
+  )
+}
+
+// Yalnızca olumsuz geri bildirim vardır; not istenmez (docs/audit.md › Arayüz kuralları).
+function Feedback({ state, onSend }: { state: FeedbackState; onSend: () => void }) {
+  return (
+    <div className="feedback">
+      <button
+        type="button"
+        className="thumbs-down"
+        disabled={state === 'sending' || state === 'sent'}
+        onClick={onSend}
+        aria-label="Cevap yanlış"
+        title="Cevap yanlış"
+      >
+        <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+          <path
+            d="M10 15v4a3 3 0 0 0 3 3l4-9V2H5.7a2 2 0 0 0-2 1.7l-1.4 9A2 2 0 0 0 4.3 15H10zM17 2h3a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2h-3"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      </button>
+      {state === 'sent' && <span className="note">Geri bildiriminiz alındı.</span>}
+      {state === 'failed' && <span className="notice warn">Geri bildirim gönderilemedi.</span>}
+    </div>
   )
 }
 
@@ -155,6 +189,7 @@ function Chat() {
         done: null,
         error: null,
         pending: true,
+        feedback: 'idle',
       },
     ])
 
@@ -168,6 +203,12 @@ function Chat() {
       onDone: (done) => update(id, () => ({ done, pending: false })),
       onError: (error) => update(id, () => ({ error, pending: false })),
     })
+  }
+
+  async function reject(id: number, auditId: string) {
+    update(id, () => ({ feedback: 'sending' }))
+    const ok = await sendFeedback(auditId)
+    update(id, () => ({ feedback: ok ? 'sent' : 'failed' }))
   }
 
   function send(event: FormEvent) {
@@ -191,6 +232,9 @@ function Chat() {
         {turns.map((turn) => {
           // error'dan önce gelen çip ve kartlar cevap sayılmaz (Arayüz kuralları 4).
           const showCards = turn.error === null
+          // Geri bildirim yalnızca tamam'da ve audit satırı yazıldıysa (audit_id dolu).
+          const auditId =
+            turn.error === null && turn.done?.status === 'tamam' ? turn.done.audit_id : null
           return (
             <article key={turn.id} className="turn">
               <p className="question">{turn.question}</p>
@@ -204,6 +248,9 @@ function Chat() {
                 )}
                 {turn.done?.status === 'tamam' && turn.answer === '' && (
                   <p className="note">Cevap üretilmedi.</p>
+                )}
+                {auditId !== null && (
+                  <Feedback state={turn.feedback} onSend={() => void reject(turn.id, auditId)} />
                 )}
                 {turn.error !== null && <p className="notice warn">{turn.error}</p>}
                 {showCards && turn.kpis.map((card, index) => <Kpi key={index} card={card} />)}

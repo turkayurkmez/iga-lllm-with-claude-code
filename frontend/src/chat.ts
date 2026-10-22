@@ -56,6 +56,8 @@ export interface Done {
   reason: string | null
   turns: number
   instruction: { name: string; version: string; summary: string }
+  // Sorunun audit satırı; yazılamadıysa null ve geri bildirim gösterilmez (docs/audit.md).
+  audit_id: string | null
 }
 
 export interface ChatHandlers {
@@ -167,7 +169,8 @@ function isDone(data: Record<string, unknown>): data is Record<string, unknown> 
     isRecord(instruction) &&
     isString(instruction.name) &&
     isString(instruction.version) &&
-    isString(instruction.summary)
+    isString(instruction.summary) &&
+    isNullableString(data.audit_id)
   )
 }
 
@@ -211,6 +214,21 @@ export function dispatch(event: SseEvent, handlers: ChatHandlers): boolean {
       return true
     default:
       return false
+  }
+}
+
+// Thumbs down: cevabı yanlış olarak işaretler (docs/audit.md › POST /feedback).
+// Başarı yalnızca 204'tür; ağ hatası da dahil diğer her sonuç false döner.
+export async function sendFeedback(auditId: string): Promise<boolean> {
+  try {
+    const response = await fetch('/feedback', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ audit_id: auditId }),
+    })
+    return response.status === 204
+  } catch {
+    return false
   }
 }
 
