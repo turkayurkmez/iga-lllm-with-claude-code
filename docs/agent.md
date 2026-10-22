@@ -150,7 +150,7 @@ Aynı soruda model `{"direction": "ALL"}`'u üç kez isterse: 1. ve 2. turda ça
 
 ## Kapsam dışı
 
-- `/chat` entegrasyonu ve SSE olayları: sonucun akışa nasıl yansıyacağı ayrı sözleşmedir. `/chat` şu an döngüyü kullanmaz.
+- `/chat` entegrasyonu ve SSE olayları: sonucun akışa nasıl yansıyacağı `docs/chat.md`'dedir. `/chat` şu an döngüyü kullanmaz.
 - Akış (streaming): döngü her turda tam yanıtı bekler; ara metin parçaları dışarı verilmez.
 - Konuşma geçmişi ve çok turlu sohbet: her `run_agent` tek sorudur, durum tutmaz.
 - Dış iptal (istemcinin bağlantıyı kesmesi, zaman aşımı): `durduruldu` yalnızca modelin `stop_reason`'ından doğar.
