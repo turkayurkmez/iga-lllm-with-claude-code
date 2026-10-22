@@ -13,8 +13,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel
 
+from backend import instructions
 from backend.envelope import ErrorCode
-from backend.prompts import SYSTEM_INSTRUCTIONS
 from backend.tools import run_tool, tool_definitions
 
 MAX_TURNS = 8
@@ -46,11 +46,20 @@ class Turn(BaseModel):
     tool_calls: list[ToolCall]
 
 
+class Instruction(BaseModel):
+    """Modele giden system talimatı: dosya adı, tam sürüm ve metnin SHA-256 özeti."""
+
+    name: str
+    version: str
+    summary: str
+
+
 class AgentResult(BaseModel):
     status: Status
     reason: str | None
     text: str
     turns: list[Turn]
+    instruction: Instruction
 
 
 def _call_key(call: ToolCall) -> tuple[str, str]:
@@ -102,19 +111,39 @@ def _execute(call: ToolCall) -> dict:
     }
 
 
-def run_agent(question: str, client: Any = None) -> AgentResult:
-    """Soruyu agent döngüsünden geçirir; API ve ayar hataları çağırana fırlar."""
+def run_agent(
+    question: str,
+    client: Any = None,
+    instruction_version: str | None = None,
+) -> AgentResult:
+    """Soruyu agent döngüsünden geçirir; API ve ayar hataları çağırana fırlar.
+
+    instruction_version verilmezse COPILOT_INSTRUCTION (boşsa v1) kullanılır.
+    """
     if not question.strip():
         raise ValueError("Soru boş olamaz.")
+    # Verilen bilinmeyen sürüm, ayar yüklenmeden ve model çağrılmadan ValueError verir.
+    if instruction_version is not None:
+        instructions.load(instruction_version)
 
     # backend.llm ilk çağrıda yüklenir; böylece bu modülü import etmek .env istemez.
     llm = importlib.import_module("backend.llm")
     if client is None:
         client = llm.client
 
+    # Ortamdaki sürüm .env yüklendikten sonra okunur; geçersizse API çağrısından önce
+    # ValueError verir.
+    name = instruction_version or instructions.default_version()
+    system = instructions.load(name)
+    instruction = Instruction(
+        name=name,
+        version=instructions.VERSIONS[name],
+        summary=instructions.summary(system),
+    )
+
     request = {
         "model": llm.MODEL,
-        "system": SYSTEM_INSTRUCTIONS,
+        "system": system,
         "tools": tool_definitions(),
         "max_tokens": MAX_TOKENS,
     }
@@ -136,7 +165,13 @@ def run_agent(question: str, client: Any = None) -> AgentResult:
         if verdict is not None:
             status, reason = verdict
             text = "".join(b.text for b in response.content if b.type == "text")
-            return AgentResult(status=status, reason=reason, text=text, turns=turns)
+            return AgentResult(
+                status=status,
+                reason=reason,
+                text=text,
+                turns=turns,
+                instruction=instruction,
+            )
 
         # Thinking blokları da dahil asistan içeriği olduğu gibi geri gönderilir.
         messages.append({"role": "assistant", "content": response.content})

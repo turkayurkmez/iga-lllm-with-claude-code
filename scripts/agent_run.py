@@ -10,11 +10,13 @@ token sayılarını, sonda durumu ve son cevabı yazdırır.
   gerçek run_tool ile çalışır. Her vaka beklenen durum ve "çalıştı mı" deseniyle
   karşılaştırılır; uymayan vaka varsa script 1 ile çıkar.
 
-COPILOT_DATA ortamda ya da .env'de yoksa referans gün verisi kullanılır.
+COPILOT_DATA ortamda ya da .env'de yoksa referans gün verisi kullanılır. Talimat
+sürümü --instruction ile seçilir; verilmezse COPILOT_INSTRUCTION, o da boşsa v1.
+Çıktıda kullanılan dosya ve özeti "talimat: v1.md (Özet: ...)" olarak yazılır.
 
 Repo kökünden çalıştırın:
-python scripts/agent_run.py "Bugün kaç uçuş var?"
-python scripts/agent_run.py --vaka liste | hepsi | <vaka adı>
+python scripts/agent_run.py "Bugün kaç uçuş var?" [--instruction v1]
+python scripts/agent_run.py --vaka liste | hepsi | <vaka adı> [--instruction v1]
 """
 
 import argparse
@@ -35,6 +37,7 @@ sys.path.insert(0, str(ROOT))
 
 from backend import llm
 from backend.agent import AgentResult, run_agent
+from backend.instructions import VERSIONS, default_version
 
 DEFAULT_DATA = "data/referans/seed42-2026-10-20.json"
 SUMMARY = "get_flight_summary"
@@ -212,18 +215,24 @@ def print_result(result: AgentResult, usages: list[Usage], fake: bool) -> None:
             print(f"  {call.name} {arguments} -> {outcome}")
 
     print(f"\nToplam token: input={total_in} output={total_out}{label}")
+    instruction = result.instruction
+    print(f"talimat: {instruction.name}.md (Özet: {instruction.summary[:12]})")
     print(f"Durum: {result.status}")
     if result.reason is not None:
         print(f"Neden: {result.reason}")
     print(f"\nCevap:\n{result.text or '(metin yok)'}")
 
 
-def run_scenario(name: str) -> bool:
+def run_scenario(name: str, instruction: str) -> bool:
     """Vakayı oynatır, çıktıyı yazar; beklenenle uyuşuyorsa True döner."""
     scenario = SCENARIOS[name]
     responses = scenario.responses()
     print(f"=== {name}: {scenario.description}\n")
-    result = run_agent(f"[senaryo] {name}", client=ScriptedClient(responses))
+    result = run_agent(
+        f"[senaryo] {name}",
+        client=ScriptedClient(responses),
+        instruction_version=instruction,
+    )
     print_result(result, [r.usage for r in responses], fake=True)
 
     executed = [[c.executed for c in turn.tool_calls] for turn in result.turns]
@@ -248,6 +257,14 @@ def main() -> None:
         choices=["liste", "hepsi", *SCENARIOS],
         help="Sahte modelle oynatılacak sınır vakası (API çağrısı yok)",
     )
+    parser.add_argument(
+        "--instruction",
+        choices=list(VERSIONS),
+        help=(
+            "Talimat sürümü (ör. v1 → backend/instructions/v1.md); verilmezse "
+            "COPILOT_INSTRUCTION, o da boşsa v1"
+        ),
+    )
     args = parser.parse_args()
 
     # backend.llm .env'yi yükledi; COPILOT_DATA hâlâ boşsa referans veri kullanılır.
@@ -259,11 +276,21 @@ def main() -> None:
             print(f"{name:<25} {scenario.description}")
         return
 
+    # backend.llm .env'yi yükledi; --instruction yoksa COPILOT_INSTRUCTION geçerli olmalı.
+    instruction = args.instruction or default_version()
+    if instruction not in VERSIONS:
+        print(
+            f"Hata: Bilinmeyen talimat sürümü: {instruction!r} (COPILOT_INSTRUCTION); "
+            f"geçerli sürümler: {', '.join(VERSIONS)}",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
     print(f"Veri: {os.environ['COPILOT_DATA']}")
     if args.vaka is not None:
         print("Model: sahte (API çağrısı yok)\n")
         names = list(SCENARIOS) if args.vaka == "hepsi" else [args.vaka]
-        outcomes = {name: run_scenario(name) for name in names}
+        outcomes = {name: run_scenario(name, instruction) for name in names}
         if len(names) > 1:
             print("Özet:")
             for name, ok in outcomes.items():
@@ -275,7 +302,7 @@ def main() -> None:
     print(f"Model: {llm.MODEL}")
     print(f"Soru: {args.soru}\n")
     recorder = UsageRecorder(llm.client)
-    result = run_agent(args.soru, client=recorder)
+    result = run_agent(args.soru, client=recorder, instruction_version=instruction)
     print_result(result, recorder.usages, fake=False)
 
 

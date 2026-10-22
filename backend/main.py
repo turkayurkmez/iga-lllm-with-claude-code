@@ -15,7 +15,7 @@ from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel, field_validator
 from starlette.concurrency import run_in_threadpool
 
-from backend.prompts import SYSTEM_INSTRUCTIONS
+from backend import instructions
 from backend.tools import run_tool, tool_definitions
 
 logging.basicConfig(level=logging.INFO)
@@ -72,13 +72,15 @@ def sse_event(event: str, data: dict) -> str:
     return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
 
 
-async def stream_reply(llm: ModuleType, message: str) -> AsyncIterator[str]:
+async def stream_reply(
+    llm: ModuleType, system: str, message: str
+) -> AsyncIterator[str]:
     """Model yanıtını SSE olayları olarak üretir: delta*, ardından done ya da error."""
     try:
         async with llm.async_client.messages.stream(
             model=llm.MODEL,
             max_tokens=MAX_TOKENS,
-            system=SYSTEM_INSTRUCTIONS,
+            system=system,
             messages=[{"role": "user", "content": message}],
         ) as stream:
             async for text in stream.text_stream:
@@ -142,10 +144,17 @@ async def chat(request: ChatRequest) -> StreamingResponse:
     except RuntimeError:
         logger.exception("LLM ayarları yüklenemedi")
         raise HTTPException(status_code=503, detail=CONFIG_ERROR_MESSAGE) from None
+    # Talimat, .env yüklendikten sonra COPILOT_INSTRUCTION'a göre okunur; bilinmeyen
+    # sürüm de bir ayar hatasıdır.
+    try:
+        system = instructions.load(instructions.default_version())
+    except ValueError:
+        logger.exception("Talimat sürümü yüklenemedi")
+        raise HTTPException(status_code=503, detail=CONFIG_ERROR_MESSAGE) from None
 
     # text/event-stream için Starlette charset=utf-8'i başlığa kendisi ekler.
     return StreamingResponse(
-        stream_reply(llm, request.message),
+        stream_reply(llm, system, request.message),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache"},
     )

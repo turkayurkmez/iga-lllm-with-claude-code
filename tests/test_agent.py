@@ -7,6 +7,7 @@ yapılmaz. Beklenen sonuç docs/agent.md › Örnek'ten, hata zarfları docs/htt
 """
 
 import copy
+import hashlib
 import importlib
 import importlib.util
 import json
@@ -26,6 +27,9 @@ ANSWER = (
     "Kaynak: data/referans/seed42-2026-10-20.json, 16:22 itibarıyla."
 )
 TOOL_USE_ID = "toolu_01"
+
+INSTRUCTIONS_DIR = REPO_ROOT / "backend" / "instructions"
+INSTRUCTION_VAR = "COPILOT_INSTRUCTION"
 
 # docs/agent.md › Örnek
 SUMMARY_ALL = {
@@ -292,6 +296,22 @@ def load_agent():
     return module
 
 
+@pytest.fixture
+def instruction(instruction_name) -> tuple[str, dict]:
+    """Seçilen talimatın metni ve beklenen AgentResult.instruction (docs/agent.md).
+
+    Özet koddan bağımsız olarak dosyadan hesaplanır.
+    """
+    from backend.instructions import VERSIONS
+
+    text = (INSTRUCTIONS_DIR / f"{instruction_name}.md").read_text(encoding="utf-8")
+    return text, {
+        "name": instruction_name,
+        "version": VERSIONS[instruction_name],
+        "summary": hashlib.sha256(text.encode("utf-8")).hexdigest(),
+    }
+
+
 def run_single_tool(name: str, args: dict):
     """Model tek tool ister, sonra cevap verir; sonucu ve sahte istemciyi döndürür."""
     first = model_message("tool_use", tool_use_block(name, args))
@@ -302,11 +322,13 @@ def run_single_tool(name: str, args: dict):
 
 
 @pytest.fixture(autouse=True)
-def environment(monkeypatch):
+def environment(monkeypatch, instruction_name):
     # source, COPILOT_DATA'nın değeri olduğu gibi döner; göreli yol için kök sabitlenir.
     monkeypatch.chdir(REPO_ROOT)
     monkeypatch.setenv("COPILOT_NOW", NOW)
     monkeypatch.setenv("COPILOT_DATA", REFERENCE)
+    # Sürüm verilmeyen run_agent çağrıları --instruction ile seçilen talimatı kullanır.
+    monkeypatch.setenv(INSTRUCTION_VAR, instruction_name)
     # backend.llm import edilirken .env gerekmesin; ortamdaki değer .env'yi ezer.
     for name in LLM_VARS:
         monkeypatch.setenv(name, f"test-{name.lower()}")
@@ -316,10 +338,71 @@ def test_backend_agent_modulu_ve_run_agent_var():
     load_agent()
 
 
-def test_tek_tool_calisir_cevap_gelir_ornekle_birebir():
+def test_tek_tool_calisir_cevap_gelir_ornekle_birebir(instruction):
+    _, expected = instruction
     result, _, _ = run_single_tool("get_flight_summary", {"direction": "all"})
 
-    assert result.model_dump() == EXAMPLE_RESULT
+    assert result.model_dump() == {**EXAMPLE_RESULT, "instruction": expected}
+
+
+def test_talimat_surumu_secilince_o_metin_gider_ve_bildirilir(
+    instruction_name, instruction
+):
+    text, expected = instruction
+    client = FakeClient([model_message("end_turn", text_block(ANSWER))])
+
+    result = load_agent().run_agent(
+        QUESTION, client=client, instruction_version=instruction_name
+    )
+
+    assert client.requests[0]["system"] == text
+    assert result.model_dump()["instruction"] == expected
+
+
+def test_surum_verilmezse_ortamdaki_surum_kullanilir(instruction):
+    text, expected = instruction
+    result, client, _ = run_single_tool("get_flight_summary", {"direction": "all"})
+
+    assert client.requests[0]["system"] == text
+    assert result.model_dump()["instruction"] == expected
+
+
+def test_ortamdaki_bilinmeyen_surum_model_cagrilmadan_hata_verir(monkeypatch):
+    monkeypatch.setenv(INSTRUCTION_VAR, "v999")
+    client = FakeClient([])
+
+    with pytest.raises(ValueError, match="Bilinmeyen talimat sürümü"):
+        load_agent().run_agent(QUESTION, client=client)
+    assert client.requests == []
+
+
+def test_verilen_surum_ortamin_onune_gecer(monkeypatch, instruction_name, instruction):
+    text, _ = instruction
+    monkeypatch.setenv(INSTRUCTION_VAR, "v999")
+    client = FakeClient([model_message("end_turn", text_block(ANSWER))])
+
+    load_agent().run_agent(
+        QUESTION, client=client, instruction_version=instruction_name
+    )
+
+    assert client.requests[0]["system"] == text
+
+
+def test_talimat_ozeti_modele_giden_metnin_sha256_si():
+    result, client, _ = run_single_tool("get_flight_summary", {"direction": "all"})
+    system = client.requests[0]["system"]
+
+    expected = hashlib.sha256(system.encode("utf-8")).hexdigest()
+    assert result.model_dump()["instruction"]["summary"] == expected
+
+
+@pytest.mark.parametrize("version", ["v999", "../prompts", ""])
+def test_bilinmeyen_talimat_surumu_model_cagrilmadan_hata_verir(version):
+    client = FakeClient([])
+
+    with pytest.raises(ValueError, match="Bilinmeyen talimat sürümü"):
+        load_agent().run_agent(QUESTION, client=client, instruction_version=version)
+    assert client.requests == []
 
 
 def test_tek_tool_vakasinda_model_iki_kez_cagrilir():
@@ -328,16 +411,16 @@ def test_tek_tool_vakasinda_model_iki_kez_cagrilir():
     assert len(client.requests) == 2
 
 
-def test_ilk_istek_modele_tool_tanimlariyla_gider():
+def test_ilk_istek_modele_tool_tanimlariyla_gider(instruction):
     from backend.llm import MODEL
-    from backend.prompts import SYSTEM_INSTRUCTIONS
     from backend.tools import tool_definitions
 
+    text, _ = instruction
     _, client, _ = run_single_tool("get_flight_summary", {"direction": "all"})
 
     assert client.requests[0] == {
         "model": MODEL,
-        "system": SYSTEM_INSTRUCTIONS,
+        "system": text,
         "tools": tool_definitions(),
         "max_tokens": 16000,
         "messages": [{"role": "user", "content": QUESTION}],
@@ -425,12 +508,15 @@ def run_scenario(responses: list[Message]):
 @pytest.mark.parametrize(
     ("responses", "status", "reason", "text", "executed"), LIMIT_CASES
 )
-def test_sinir_vakasi_durum_neden_ve_metin(responses, status, reason, text, executed):
+def test_sinir_vakasi_durum_neden_ve_metin(
+    responses, status, reason, text, executed, instruction
+):
     dumped, _ = run_scenario(responses())
 
     assert dumped["status"] == status
     assert dumped["reason"] == reason
     assert dumped["text"] == text
+    assert dumped["instruction"] == instruction[1]
 
 
 @pytest.mark.parametrize(

@@ -6,20 +6,22 @@ Bu belge, operatörün sorusunu modele verip modelin istediği tool'ları çalı
 
 ## Girdi
 
-Döngü tek bir fonksiyondur: `backend.agent.run_agent(question, client=None) -> AgentResult`. Senkron çalışır.
+Döngü tek bir fonksiyondur: `backend.agent.run_agent(question, client=None, instruction_version=None) -> AgentResult`. Senkron çalışır.
 
 | Alan | Tür | Zorunlu | Açıklama |
 |---|---|---|---|
 | `question` | metin | evet | Operatörün sorusu, olduğu gibi. Kırpılmaz, yeniden yazılmaz; modele ilk `user` mesajı olarak gider. |
 | `client` | senkron Anthropic istemcisi | hayır | Model çağrıları `client.messages.create(**istek)` ile yapılır. Verilmezse `backend.llm.client` kullanılır. Testler buraya sahte istemci verir. |
+| `instruction_version` | metin | hayır | System talimatının sürüm dosyası adı (`backend/instructions/<ad>.md`; `docs/system-talimat.md` › Versiyonlama). Verilmezse `backend.instructions.default_version()`: ortamdaki `COPILOT_INSTRUCTION`, boşsa `v1`. Ortam, `backend.llm` `.env`'yi yükledikten sonra okunur. |
 
 - Boş ya da yalnızca boşluktan oluşan soru reddedilir: `ValueError` fırlar, döngü başlamaz, API çağrısı yapılmaz.
+- Kayıtlı olmayan sürüm (`backend.instructions.VERSIONS`'ta yok) reddedilir: `"Bilinmeyen talimat sürümü"` ile başlayan `ValueError` fırlar, API çağrısı yapılmaz. Sürüm parametreyle verildiyse `backend.llm` de yüklenmez; ortamdan geldiyse hata `.env` yüklendikten sonra, ilk model çağrısından önce fırlar. Parametre ortamın önüne geçer.
 - Her çağrı sıfırdan başlar; konuşma geçmişi girdi değildir (bkz. Kapsam dışı).
-- Modele giden istek: `model=backend.llm.MODEL`, `system=backend.prompts.SYSTEM_INSTRUCTIONS`, `tools=tool_definitions()`, `max_tokens=16000`. Sıcaklık gönderilmez.
+- Modele giden istek: `model=backend.llm.MODEL`, `system=backend.instructions.load(instruction_version)` (varsayılanda `backend.prompts.SYSTEM_INSTRUCTIONS` ile aynı metin), `tools=tool_definitions()`, `max_tokens=16000`. Sıcaklık gönderilmez.
 
 ## Sonuç
 
-`AgentResult` dört alanlı bir pydantic modelidir; `model_dump()` aşağıdaki biçimi verir. Alan adları İngilizce, `status` değerleri ve `reason` metni Türkçedir.
+`AgentResult` beş alanlı bir pydantic modelidir; `model_dump()` aşağıdaki biçimi verir. Alan adları İngilizce, `status` değerleri ve `reason` metni Türkçedir.
 
 | Alan | Tür | Açıklama |
 |---|---|---|
@@ -27,6 +29,15 @@ Döngü tek bir fonksiyondur: `backend.agent.run_agent(question, client=None) ->
 | `reason` (neden) | metin ya da `null` | `status` `tamam` ise `null`; diğerlerinde neden durduğunu anlatan kısa, genel Türkçe metin (ör. `"Aynı tool çağrısı 3. kez istendi: get_flight_summary."`). Exception metni, API yanıtı, request id içermez. |
 | `text` (metin) | metin | **Son** model yanıtındaki `type == "text"` blokların birleşimi, olduğu gibi. Thinking blokları ve `tool_use` blokları girmez. Boş olabilir. |
 | `turns` (turlar) | liste | Her model çağrısı için bir kayıt, çağrı sırasıyla. En az 1, en fazla 8 öğe. |
+| `instruction` (talimat) | nesne | Modele giden system talimatı. Beş bitiş durumunun hepsinde bulunur. |
+
+`instruction` öğesi:
+
+| Alan | Tür | Açıklama |
+|---|---|---|
+| `name` | metin | Kullanılan sürüm dosyasının adı: `instruction_version` ya da ortamdan gelen değer (ör. `"v1"`). |
+| `version` | metin | Tam sürüm, `backend.instructions.VERSIONS[name]` (ör. `"1.0.0"`). |
+| `summary` | metin | Modele giden metnin SHA-256 özeti (UTF-8 byte'ları, 64 karakter küçük harf hex; `backend.instructions.summary`). Metin değişip sürüm artırılmadıysa bu alandan anlaşılır. |
 
 `turns` öğesi:
 
@@ -124,9 +135,16 @@ Değerler `data/referans/seed42-2026-10-20.json`'dan; `COPILOT_NOW=2026-10-20T16
       ]
     },
     {"index": 2, "stop_reason": "end_turn", "tool_calls": []}
-  ]
+  ],
+  "instruction": {
+    "name": "v1",
+    "version": "1.0.0",
+    "summary": "050490f448180e4658f96a55d9b3d9e002d90e3645bc0172acf8956e6bf527e5"
+  }
 }
 ```
+
+`summary` `backend/instructions/v1.md`'nin şu anki metnine aittir; metin değişince değişir (testler beklenen değeri dosyadan hesaplar).
 
 Aynı soruda model `{"direction": "ALL"}`'u üç kez isterse: 1. ve 2. turda çağrı çalışır ve `SCHEMA_VALIDATION_FAILED` (`is_error: true`) döner; 3. turda istek çalıştırılmaz, sonuç `status: "tekrar_siniri"`, `reason: "Aynı tool çağrısı 3. kez istendi: get_flight_summary."`, `turns` 3 öğe, 3. öğede `executed: false`, `envelope: null`.
 

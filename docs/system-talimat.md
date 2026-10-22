@@ -2,7 +2,7 @@
 
 Bu belge, modele `system` olarak verilen talimatın (`backend/prompts.py` › `SYSTEM_INSTRUCTIONS`) sözleşmesidir. Talimat hem `/chat`'e (`backend/main.py`) hem agent döngüsüne (`backend/agent.py` › `run_agent`; `docs/agent.md` › Girdi) aynı metinle gider. Belge **tool'larla çalışan hedef talimatı** tanımlar; tool'lar `docs/tools.md`'de, tool çıktılarının zarfı `docs/zarf.md`'dedir.
 
-**Mevcut durum:** `SYSTEM_INSTRUCTIONS` hâlâ "canlı operasyon sistemlerine erişimin yok" der ve tool'lardan söz etmez; bu yüzden gerçek modelde agent tool çağırmayabilir. Metnin bu sözleşmeye uydurulması ve aşağıdaki testlerin yazılması ayrı iştir (bkz. Kapsam dışı). Sözleşme testleri koddan önce yazılır ve gevşetilmez.
+**Mevcut durum:** Metin `backend/instructions/v1.md`'dir (sürüm `1.0.0`); `backend/prompts.py` onu `backend/instructions` › `load()` ile okur. Ölçüm testleri henüz yazılmadı (bkz. Kapsam dışı). Sözleşme testleri koddan önce yazılır ve gevşetilmez.
 
 **Talimat davranışı tarif eder, veriyi taşımaz.** Sayı, durum, saat, sefer no ya da kaynak adı talimatta yer almaz; bunların tek kaynağı tool zarflarıdır. Talimat modele neyi tool'a soracağını, zarfı nasıl okuyacağını ve cevabı nasıl yazacağını söyler.
 
@@ -52,7 +52,8 @@ Bugün 600 uçuş var; 4'ü iptal, 115'i gecikmeli. Kaynak: data/referans/seed42
 - **Model adı, tool şeması ve sınır değerleri yazılmaz.** Model `backend.llm.MODEL`'den, tool tanımları `tool_definitions()`'tan, sınırlar `backend/agent.py` sabitlerinden gelir; talimata kopyalanırsa iki kaynak olur.
 - Tool adları yalnızca İlke 4'te, sıra bilgisi için geçer; tool'un ne yaptığı tool açıklamasına bırakılır.
 - Hata kodları adlarıyla (`NOT_FOUND` vb.) yazılır; modelin zarfta gördüğü değerle aynı olmalıdır.
-- Metin `backend/prompts.py`'de tek bir sabit string'dir; çalışma anında birleştirilmez, biçimlendirilmez (`str.format`, f-string yok). Böylece aynı sürüm her istekte byte byte aynıdır.
+- Metin sürüm başına tek bir dosyadır (`backend/instructions/v<MAJOR>.md`) ve 40 satırı aşmaz; dosyadan olduğu gibi okunur, çalışma anında birleştirilmez, biçimlendirilmez (`str.format`, f-string yok). Böylece aynı sürüm her istekte byte byte aynıdır.
+- Liste gerekiyorsa `-` maddesi kullanılır; numaralı liste rakam yasağına takılır. `snake_case` yalnızca tool adlarında geçer (ör. zarftaki zaman alanı adıyla değil, "veri zamanı" diye anılır).
 
 ### Cevap metni (talimat modele bunu ister)
 
@@ -65,6 +66,8 @@ Bugün 600 uçuş var; 4'ü iptal, 115'i gecikmeli. Kaynak: data/referans/seed42
 ## Versiyonlama
 
 - Talimatın sürümü `backend/prompts.py` › `SYSTEM_INSTRUCTIONS_VERSION` sabitidir, `MAJOR.MINOR.PATCH` biçiminde (`tool_version` ile aynı biçim; `docs/zarf.md`). Sürüm talimat metninin içine yazılmaz; modele gitmez.
+- Her MAJOR sürüm `backend/instructions/` altında ayrı bir `v<MAJOR>.md` dosyasıdır; tam sürüm `backend/instructions` › `VERSIONS`'ta (dosya adı → `MAJOR.MINOR.PATCH`) tutulur. MINOR ve PATCH aynı dosyayı değiştirir, MAJOR yeni dosya açar. Kullanılan sürüm `default_version()`'dır: ortamdaki `COPILOT_INSTRUCTION` (`.env.example`), boş ya da tanımsızsa `DEFAULT_VERSION` (`v1`). `load(sürüm)` kayıtlı olmayan sürümde Türkçe `ValueError` fırlatır. `/chat` sürümü her istekte, `.env` yüklendikten sonra okur; bilinmeyen sürümde 503 ve genel ayar mesajı döner, model çağrılmaz. `backend/prompts.py` sabitleri import anındaki değere göre kurulur.
+- Testlerde sürüm `pytest --instruction v1` ile seçilir (`tests/conftest.py`); verilmezse ortamdaki, sonra `.env`'deki `COPILOT_INSTRUCTION`, o da yoksa `v1`. Agent testleri bu sürümle koşar ve beklenen metni/özeti o dosyadan hesaplar; bilinmeyen sürüm pytest'i başlamadan durdurur. Oturum sonunda `talimat: v1.md (Özet: <sha256'nın ilk 12 karakteri>)` yazılır. Yükleyici sözleşmesi `tests/test_instructions.py`'dedir.
 - Metindeki her değişiklik sürümü artırır; sürüm artmadan metin değişmez.
 
 | Değişiklik | Sürüm | Örnek |
@@ -75,24 +78,25 @@ Bugün 600 uçuş var; 4'ü iptal, 115'i gecikmeli. Kaynak: data/referans/seed42
 
 - MAJOR ve MINOR değişiklikte aşağıdaki ölçüm testleri (ücretli) değişiklikten önce ve sonra koşulur; sonuçlar `experiments/` altında `olc.py`/`compare.py` düzeniyle yan yana konur, bulgu `docs/sorumluluk-zinciri.md`'ye işlenir. PATCH'te ölçüm zorunlu değildir.
 - Her sürüm bu belgenin sonundaki Değişiklik günlüğüne bir satır olarak yazılır. Belge ile sabit uyuşmazsa test kırmızıdır.
-- Sürüm `AgentResult`'a eklenmez (`docs/agent.md` › Sonuç alanları sabit); hangi cevabın hangi sürümle üretildiği commit geçmişinden izlenir.
+- Agent sürümü seçebilir ve bildirir: `run_agent(..., instruction_version="v1")` o dosyanın metnini `system` olarak gönderir; `AgentResult.instruction` `name` (dosya adı), `version` (tam sürüm) ve `summary` (gönderilen metnin SHA-256 özeti) taşır (`docs/agent.md` › Girdi, Sonuç). Hangi cevabın hangi metinle üretildiği buradan izlenir. `/chat` ve `backend/prompts.py` parametre almaz, `default_version()`'ı kullanır.
 
 ## Testler
 
-İki tür test vardır. **API'siz** testler `tests/test_prompts.py`'de (yazılacak) ve mevcut `tests/test_agent.py`'dedir; her koşumda çalışır. **Ölçüm** testleri gerçek modelle çalışır, ücretlidir; pytest'e girmez, yalnızca sürüm değişikliğinde elle koşulur (CLAUDE.md › Yasaklar: gerçek API çağrısını gereksiz tekrarlama).
+İki tür test vardır. **API'siz** testler `tests/test_prompts.py`'de ve mevcut `tests/test_agent.py`'dedir; her koşumda çalışır. **Ölçüm** testleri gerçek modelle çalışır, ücretlidir; pytest'e girmez, yalnızca sürüm değişikliğinde elle koşulur (CLAUDE.md › Yasaklar: gerçek API çağrısını gereksiz tekrarlama).
 
 | Test | Tür | Neyi denetler | Durum |
 |---|---|---|---|
 | `test_ilk_istek_modele_tool_tanimlariyla_gider` | API'siz | `run_agent` isteğinde `system` `SYSTEM_INSTRUCTIONS`'a eşit. | Var (`tests/test_agent.py`) |
-| `test_chat_ayni_talimati_gonderir` | API'siz | `/chat` isteğinin `system`'i `SYSTEM_INSTRUCTIONS`'a eşit; iki uç aynı metni kullanır. | Yazılacak |
-| `test_surum_bicimi_gecerli` | API'siz | `SYSTEM_INSTRUCTIONS_VERSION` `^\d+\.\d+\.\d+$`'a uyar. | Yazılacak |
-| `test_surum_degisiklik_gunlugunde_var` | API'siz | Sabitteki sürüm bu belgenin Değişiklik günlüğündeki son satırla aynı. | Yazılacak |
-| `test_talimat_turkce_ve_tek_parca` | API'siz | Metin boş değil, `{`/`}` biçimlendirme yer tutucusu içermez. | Yazılacak |
-| `test_talimatta_operasyon_verisi_yok` | API'siz | Metinde rakam, sefer no/tescil/stand deseni (`TK\d+`, `TC-[A-Z]{3}` vb.) ve dosya yolu yok. | Yazılacak |
-| `test_talimatta_model_adi_yok` | API'siz | `backend.llm.MODEL` ve `TEMP_MODEL` değerleri metinde geçmez. | Yazılacak |
-| `test_talimat_kayitli_tool_adlarini_kullanir` | API'siz | Metinde geçen her `snake_case` tool adı `tool_definitions()`'ta var; adı değişen tool talimatta eskimiş kalmaz. | Yazılacak |
-| `test_talimat_hata_kodlarini_dogru_yazar` | API'siz | Metinde geçen her büyük harfli kod `docs/zarf.md` › Hata kodları'ndaki beş koddan biri. | Yazılacak |
-| `test_canli_veri_yok_ifadesi_kalmadi` | API'siz | Metin "canlı veriye erişimin yok" anlamındaki eski ifadeyi içermez. | Yazılacak; mevcut metinde kırmızı |
+| `test_talimat_surumu_secilince_o_metin_gider_ve_bildirilir`, `test_talimat_ozeti_modele_giden_metnin_sha256_si`, `test_bilinmeyen_talimat_surumu_model_cagrilmadan_hata_verir` | API'siz | `instruction_version` metni seçer; `AgentResult.instruction` doğru; bilinmeyen sürüm model çağrılmadan reddedilir. | Var (`tests/test_agent.py`) |
+| `test_chat_ayni_talimati_gonderir` | API'siz | `/chat` isteğinin `system`'i `SYSTEM_INSTRUCTIONS`'a eşit; iki uç aynı metni kullanır. | Var (`tests/test_prompts.py`) |
+| `test_surum_bicimi_gecerli` | API'siz | `SYSTEM_INSTRUCTIONS_VERSION` `^\d+\.\d+\.\d+$`'a uyar. | Var (`tests/test_prompts.py`) |
+| `test_surum_degisiklik_gunlugunde_var` | API'siz | Sabitteki sürüm bu belgenin Değişiklik günlüğündeki son satırla aynı. | Var (`tests/test_prompts.py`) |
+| `test_talimat_turkce_ve_tek_parca` | API'siz | Metin boş değil, `{`/`}` biçimlendirme yer tutucusu içermez. | Var (`tests/test_prompts.py`) |
+| `test_talimatta_operasyon_verisi_yok` | API'siz | Metinde rakam, sefer no/tescil/stand deseni (`TK\d+`, `TC-[A-Z]{3}` vb.) ve dosya yolu yok. | Var (`tests/test_prompts.py`) |
+| `test_talimatta_model_adi_yok` | API'siz | `backend.llm.MODEL` ve `TEMP_MODEL` değerleri metinde geçmez. | Var (`tests/test_prompts.py`) |
+| `test_talimat_kayitli_tool_adlarini_kullanir` | API'siz | Metinde geçen her `snake_case` tool adı `tool_definitions()`'ta var (adı değişen tool talimatta eskimiş kalmaz) ve kayıtlı her tool adı metinde geçer (İlke 4). | Var (`tests/test_prompts.py`) |
+| `test_talimat_hata_kodlarini_dogru_yazar` | API'siz | Metinde geçen her alt çizgili büyük harfli kod `docs/zarf.md` › Hata kodları'ndaki beş koddan biri ve İlke 5'teki dört kod (`NOT_FOUND`, `AMBIGUOUS_ENTITY`, `SCHEMA_VALIDATION_FAILED`, `CAPABILITY_NOT_IN_SCOPE`) metinde geçer. | Var (`tests/test_prompts.py`) |
+| `test_canli_veri_yok_ifadesi_kalmadi` | API'siz | Metin "erişimin yok" ifadesini içermez. | Var (`tests/test_prompts.py`) |
 | Tool seçimi | Ölçüm | `experiments/function_calling/sorular.json` sorularında çağrılan tool kümesi beklenenle eşleşir (`olc.py` yöntemi, 3'er tekrar). | Yazılacak |
 | Uydurma yok | Ölçüm | `NOT_FOUND`, `AMBIGUOUS_ENTITY`, eksik alan ve kapsam dışı sorularında cevapta zarfta olmayan sayı/kod geçmez. | Yazılacak |
 | Cevap yapısı | Ölçüm | `tamam` cevaplarında ilk cümle cevaptır, zarftan değer varsa `Kaynak: ... itibarıyla.` satırı bulunur. | Yazılacak |
@@ -102,7 +106,7 @@ Bugün 600 uçuş var; 4'ü iptal, 115'i gecikmeli. Kaynak: data/referans/seed42
 
 ## Kapsam dışı
 
-- `SYSTEM_INSTRUCTIONS` metninin yeniden yazılması ve yukarıdaki testlerin kodlanması: bu belgeden sonraki ayrı iş.
+- Ölçüm testlerinin kodlanması: ayrı iş.
 - Tool açıklamaları ve şemaları: `docs/tools.md` ve `backend/tools/contracts/`. Talimat tool'un ne yaptığını tekrar etmez.
 - Agent döngüsünün sınırları ve bitiş durumları: `docs/agent.md`. Talimat `status` üretmez, sınır değeri söylemez.
 - `/chat`'in agent döngüsüne bağlanması ve SSE olayları: ayrı sözleşme (`docs/agent.md` › Kapsam dışı).
@@ -116,4 +120,4 @@ Bugün 600 uçuş var; 4'ü iptal, 115'i gecikmeli. Kaynak: data/referans/seed42
 
 | Sürüm | Tarih | Değişiklik |
 |---|---|---|
-| — | — | Henüz sürüm yok; ilk sürüm (`1.0.0`) metin bu sözleşmeye uydurulduğunda yazılır. |
+| `1.0.0` | 2026-10-22 | İlk sürüm (`v1.md`): sekiz çekirdek ilke nedenleriyle, dört parçalı cevap düzeni, cevap yazım kuralları. "Canlı veriye erişimin yok" metninin yerini alır. |
