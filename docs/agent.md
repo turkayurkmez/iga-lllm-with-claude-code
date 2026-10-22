@@ -6,11 +6,12 @@ Bu belge, operatörün sorusunu modele verip modelin istediği tool'ları çalı
 
 ## Girdi
 
-Döngü tek bir fonksiyondur: `run_agent(question) -> AgentResult`.
+Döngü tek bir fonksiyondur: `backend.agent.run_agent(question, client=None) -> AgentResult`. Senkron çalışır.
 
 | Alan | Tür | Zorunlu | Açıklama |
 |---|---|---|---|
 | `question` | metin | evet | Operatörün sorusu, olduğu gibi. Kırpılmaz, yeniden yazılmaz; modele ilk `user` mesajı olarak gider. |
+| `client` | senkron Anthropic istemcisi | hayır | Model çağrıları `client.messages.create(**istek)` ile yapılır. Verilmezse `backend.llm.client` kullanılır. Testler buraya sahte istemci verir. |
 
 - Boş ya da yalnızca boşluktan oluşan soru reddedilir: `ValueError` fırlar, döngü başlamaz, API çağrısı yapılmaz.
 - Her çağrı sıfırdan başlar; konuşma geçmişi girdi değildir (bkz. Kapsam dışı).
@@ -18,7 +19,7 @@ Döngü tek bir fonksiyondur: `run_agent(question) -> AgentResult`.
 
 ## Sonuç
 
-`AgentResult` dört alanlı bir nesnedir. Alan adları İngilizce, `status` değerleri ve `reason` metni Türkçedir.
+`AgentResult` dört alanlı bir pydantic modelidir; `model_dump()` aşağıdaki biçimi verir. Alan adları İngilizce, `status` değerleri ve `reason` metni Türkçedir.
 
 | Alan | Tür | Açıklama |
 |---|---|---|
@@ -78,7 +79,7 @@ Her model yanıtından sonra döngü yanıtı aşağıdaki sırayla değerlendir
 ## Kurallar
 
 - **Tool yalnızca `run_tool` ile çalışır.** Döngü tool fonksiyonlarını doğrudan çağırmaz, argümanı doğrulamaz, düzeltmez ya da varsayılan eklemez; `name` ve `input` `run_tool(name, input)`'a olduğu gibi gider. Kayıtlı olmayan ad da `run_tool`'a gider ve `CAPABILITY_NOT_IN_SCOPE` zarfı döner.
-- **Zarf birebir modele gider.** Her `tool_result`'ın içeriği zarfın tamamıdır, `ensure_ascii=False` JSON. Döngü zarftan alan çıkarmaz, `error.message`'ı yeniden yazmaz.
+- **Zarf birebir modele gider.** Her `tool_result`'ın içeriği (`content`) zarfın tamamıdır, `ensure_ascii=False` JSON metni; `is_error` her `tool_result`'ta açıkça yazılır. Döngü zarftan alan çıkarmaz, `error.message`'ı yeniden yazmaz.
 - **`is_error` yalnızca `SCHEMA_VALIDATION_FAILED`'da `true`.** `NOT_FOUND`, `AMBIGUOUS_ENTITY`, `CAPABILITY_NOT_IN_SCOPE`, `STALE_DATA` geçerli tool sonuçlarıdır; `is_error: false` ile gider (`loop_envelope.py` ile aynı).
 - **Bir turun sonuçları tek mesajda gider.** Turdaki tüm `tool_result`'lar, `tool_use` sırasıyla ve aynı `id`'lerle tek bir `user` mesajına konur.
 - **Asistan turu olduğu gibi geri gönderilir.** Geçmişe `response.content` eklenir; yalnızca metin değil, thinking blokları da (CLAUDE.md › Kurallar).
@@ -139,4 +140,4 @@ Aynı soruda model `{"direction": "ALL"}`'u üç kez isterse: 1. ve 2. turda ça
 - Paralel tool çalıştırma: aynı turdaki çağrılar sırayla çalışır.
 - Yeniden deneme: API hatasında, `max_tokens`'ta ya da `durduruldu`'da döngü kendiliğinden yeniden denemez.
 - Sınırların istek başına ayarlanması, sıcaklık, model seçimi.
-- Kod ve testler: bu belge yalnızca sözleşmedir.
+- Kod: bu belge yalnızca sözleşmedir. Sözleşme testleri `tests/test_agent.py`'dedir.
