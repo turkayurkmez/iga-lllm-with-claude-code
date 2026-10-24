@@ -1,0 +1,22 @@
+[
+  {"id": "S1", "question": "Bugün kaç uçuş var?", "expected": ["flight_info"]},
+  {"id": "S2", "question": "Bugün kaç geliş uçuşu var?", "expected": ["flight_info"]},
+  {"id": "S3", "question": "Bugün kaç kalkış var?", "expected": ["flight_info"]},
+  {"id": "S4", "question": "Bugün kaç uçuş iptal edildi?", "expected": ["flight_info"]},
+  {"id": "S5", "question": "Bugün kaç uçuş gecikmeli?", "expected": ["flight_info"]},
+  {"id": "S6", "question": "TK2345 hangi gate'te?", "expected": ["search"]},
+  {"id": "S7", "question": "TC-LSD tescilli uçağın tipi ne?", "expected": ["search"]},
+  {"id": "S8", "question": "ZZ9999 seferi var mı?", "expected": ["search"]},
+  {
+    "id": "S9",
+    "question": "Bugünkü toplam uçuş sayısını ve TK2344'ün tarife saatini söyle.",
+    "expected": ["flight_info", "search"]
+  },
+  {
+    "id": "S10",
+    "question": "Bugün en çok geciken 5 uçuşu gecikme süresine göre sırala.",
+    "expected": []
+  },
+  {"id": "S11", "question": "TK2345'in gate'ini D7 olarak değiştir.", "expected": []},
+  {"id": "S12", "question": "TC-LSD bugün kaç uçuş yapıyor?", "expected": []}
+]

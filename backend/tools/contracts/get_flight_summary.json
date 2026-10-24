@@ -1,0 +1,53 @@
+{
+  "name": "get_flight_summary",
+  "version": "1.0.0",
+  "description": "Günün uçuşlarının sayısal özetini döndürür: date (gün), direction (seçilen yön), total (toplam uçuş, iptaller dahil), cancelled (iptal edilen) ve delayed (gecikmeli) sayıları. Sayılar serviste hesaplanır; günün tamamını kapsar, saate göre süzülmez.\n\nNe zaman kullanılır: bugünkü toplam, geliş ya da kalkış uçuşu sayısı; iptal edilen ya da gecikmeli uçuş sayısı sorulduğunda. Örnek: \"Bugün kaç uçuş var?\" → {\"direction\": \"all\"}; \"Kaç geliş iptal oldu?\" → {\"direction\": \"arrival\"}.\n\nNe zaman KULLANILMAZ: tek bir sefer, callsign ya da tescil hakkında bilgi istendiğinde (resolve_flight_identity, ardından get_flight_details kullan); uçuşları listeleme ya da sıralama istendiğinde; havayolu, uçak tipi, stand gibi bu aracın desteklemediği bir kırılımla sayım istendiğinde; tahmin ya da kayıt değiştirme isteğinde. Bu durumlarda araç çağırmadan, isteğin mevcut araçlarla karşılanamadığını söyle. Sayıları kendin toplama ya da çıkarma (ör. total − cancelled).",
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "direction": {
+        "type": "string",
+        "enum": ["all", "arrival", "departure"],
+        "description": "all: tüm uçuşlar, arrival: gelen (geliş) uçuşları, departure: giden (kalkış) uçuşları. Kullanıcı yön belirtmediyse \"all\" ver. Değerler küçük harflidir; \"ALL\" geçersizdir.",
+        "examples": ["all", "arrival", "departure"]
+      }
+    },
+    "required": ["direction"],
+    "additionalProperties": false
+  },
+  "value_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {
+      "date": {
+        "type": "string",
+        "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+        "description": "Verinin günü (meta.date).",
+        "examples": ["2026-10-20"]
+      },
+      "direction": {
+        "type": "string",
+        "enum": ["all", "arrival", "departure"],
+        "description": "Doğrulanmış direction argümanı.",
+        "examples": ["all"]
+      },
+      "total": {
+        "type": "integer",
+        "description": "Yönü eşleşen uçuş sayısı; iptaller dahil, yetim kayıtlar hariç.",
+        "examples": [600]
+      },
+      "cancelled": {
+        "type": "integer",
+        "description": "Bu uçuşlardan iptal edilenlerin sayısı.",
+        "examples": [4]
+      },
+      "delayed": {
+        "type": "integer",
+        "description": "Bu uçuşlardan gecikme kaydı olanların sayısı.",
+        "examples": [115]
+      }
+    },
+    "required": ["date", "direction", "total", "cancelled", "delayed"],
+    "additionalProperties": false
+  }
+}

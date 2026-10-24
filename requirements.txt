@@ -5,9 +5,14 @@ anthropic==1.15.0
 fastapi==0.146.0
 uvicorn[standard]==0.54.0
 
-# Config
+# Config / doğrulama
+pydantic==2.14.1
+jsonschema==4.26.0
 pydantic-settings==2.16.0
 python-dotenv==1.2.4
+
+# Canlı konum akışı (MQTT, docs/canli_akis.md)
+paho-mqtt==2.1.0
 
 # Veritabanı (PostgreSQL)
 sqlalchemy==2.1.5

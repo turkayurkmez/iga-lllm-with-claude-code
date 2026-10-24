@@ -1,0 +1,47 @@
+:root {
+  --bg: #f6f7f9;
+  --surface: #ffffff;
+  --text: #1c2026;
+  --muted: #5b6470;
+  --border: #dde1e6;
+  --accent: #2f5bd3;
+  --on-accent: #ffffff;
+  --warn: #b7791f;
+  --ok: #1f7a3a;
+  --ok-bg: #e3f4e8;
+  --bad: #b42318;
+  --bad-bg: #fde8e6;
+  --mono: ui-monospace, Consolas, 'Cascadia Mono', monospace;
+
+  font-family: system-ui, 'Segoe UI', Roboto, sans-serif;
+  line-height: 1.5;
+  color: var(--text);
+  background: var(--bg);
+  color-scheme: light dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #14171c;
+    --surface: #1c2027;
+    --text: #e6e9ee;
+    --muted: #9aa3ae;
+    --border: #2e343d;
+    --accent: #7c9cf0;
+    --on-accent: #10131a;
+    --warn: #e0a84a;
+    --ok: #6fd08f;
+    --ok-bg: #173323;
+    --bad: #f28b82;
+    --bad-bg: #3a1c1a;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+}

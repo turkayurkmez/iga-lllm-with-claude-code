@@ -1,0 +1,84 @@
+{
+  "name": "resolve_flight_identity",
+  "version": "1.0.0",
+  "description": "Kullanıcının verdiği kimliği (sefer no, callsign ya da tescil) uçuş kaydına çevirir ve aday uçuşu döndürür: flight_id, flight_no, callsign, registration, movement_type, scheduled_time ve matched_on (eşleşen alan). Eşleşme büyük/küçük harf duyarsız tam eşitliktir; sefer no ve callsign'da sayının başındaki sıfırlar yok sayılır (THY15 = THY0015); kısmi değer eşleşmez. Hiç eşleşme yoksa NOT_FOUND, birden fazla eşleşme varsa adayların listesi AMBIGUOUS_ENTITY ile döner.\n\nNe zaman kullanılır: kullanıcı belirli bir uçuşu sefer no, callsign ya da tescille andığında, get_flight_details'ten önce flight_id'yi bulmak için; bir seferin var olup olmadığı sorulduğunda. Örnek: \"THY2345 hangi stand'da?\" → {\"query\": \"THY2345\"}; \"TC-LSD bugün nerede?\" → {\"query\": \"TC-LSD\"}.\n\nNe zaman KULLANILMAZ: uçuş sayısı istendiğinde (get_flight_summary kullan); uçuşları listeleme, sıralama ya da filtreleme istendiğinde; flight_id zaten elindeyse (doğrudan get_flight_details kullan); kayıt değiştirme isteğinde. AMBIGUOUS_ENTITY döndüğünde adaylardan birini kendin seçme; adayları sefer no, yön ve tarifeyle listeleyip kullanıcıdan netleştirme iste.",
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "query": {
+        "type": "string",
+        "pattern": "\\S",
+        "description": "Kullanıcının verdiği sefer no (ör. \"TK2345\"), callsign (ör. \"THY2345\") ya da tescil (ör. \"TC-LSD\"), olduğu gibi. Türünü belirtme; araç üç alanda da arar. Boş olamaz.",
+        "examples": ["TK2345", "THY2345", "TC-LSD"]
+      }
+    },
+    "required": ["query"],
+    "additionalProperties": false
+  },
+  "value_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$defs": {
+      "candidate": {
+        "type": "object",
+        "properties": {
+          "flight_id": {
+            "type": "string",
+            "pattern": "^FL-\\d{8}-\\d{4}$",
+            "description": "Uçuşun kimliği; get_flight_details'e verilir.",
+            "examples": ["FL-20261020-0270"]
+          },
+          "flight_no": {
+            "type": "string",
+            "description": "Sefer numarası.",
+            "examples": ["TK2345"]
+          },
+          "callsign": {
+            "type": "string",
+            "description": "Çağrı adı.",
+            "examples": ["THY2345"]
+          },
+          "registration": {
+            "type": "string",
+            "description": "Uçağın tescili.",
+            "examples": ["TC-LSD"]
+          },
+          "movement_type": {
+            "type": "string",
+            "enum": ["ARRIVAL", "DEPARTURE"],
+            "description": "Hareket yönü.",
+            "examples": ["DEPARTURE"]
+          },
+          "scheduled_time": {
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\+03:00$",
+            "description": "Tarife zamanı, ISO 8601, +03:00.",
+            "examples": ["2026-10-20T15:40:00+03:00"]
+          },
+          "matched_on": {
+            "type": "string",
+            "enum": ["flight_no", "callsign", "registration"],
+            "description": "query'nin eşleştiği alan; birden fazlaysa öncelik flight_no > callsign > registration.",
+            "examples": ["callsign"]
+          }
+        },
+        "required": ["flight_id", "matched_on"],
+        "additionalProperties": false
+      }
+    },
+    "anyOf": [
+      {
+        "type": "null",
+        "description": "Eşleşme yok (NOT_FOUND)."
+      },
+      {
+        "$ref": "#/$defs/candidate",
+        "description": "Tek eşleşme."
+      },
+      {
+        "type": "array",
+        "items": {"$ref": "#/$defs/candidate"},
+        "description": "Birden fazla eşleşme (AMBIGUOUS_ENTITY), flight_id'ye göre artan."
+      }
+    ]
+  }
+}

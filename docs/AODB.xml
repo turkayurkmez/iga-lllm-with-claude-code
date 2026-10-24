@@ -1,0 +1,514 @@
+<soap:Envelope xmlns:soap="http://www.w3.org/2001/12/soap-envelope"
+    encodingStyle="http://www.w3.org/2001/12/soap-encoding">
+    <soap:Header xmlns:aip="http://www.sita.aero/aip/XMLSchema">
+        <soap:MessageMetadata>
+            <aip:Source>AIP</aip:Source>
+            <aip:Timestamp>2026-10-13T12:02:20+03:00</aip:Timestamp>
+            <aip:MessageType>PublishFlightDataInput</aip:MessageType>
+            <aip:ProcessingResponseRequired>false</aip:ProcessingResponseRequired>
+            <aip:UUID>f4c1e2c126df44ce8a3bf0297313cad98485cc989e554cc18788e518dc1be68bee10fb</aip:UUID>
+        </soap:MessageMetadata>
+        <soap:OperationData>
+            <aip:OperationName>FlightUpdatedNotification.0000_AMS</aip:OperationName>
+        </soap:OperationData>
+    </soap:Header>
+    <soap:Body>
+        <aip:PublishFlightDataInput xmlns:aip="http://www.sita.aero/aip/XMLSchema">
+            <aip:FlightData>
+                <aip:RecordMetadata>
+                    <aip:ElementUpdateDetailCollection>
+                        <aip:ElementUpdateDetail>
+                            <aip:ElementIdentification>aip:FlightData</aip:ElementIdentification>
+                            <aip:Action>FlightUpdate</aip:Action>
+                            <aip:Source>AMS</aip:Source>
+                            <aip:PreviousValue />
+                        </aip:ElementUpdateDetail>
+                        <aip:ElementUpdateDetail>
+                            <aip:ElementIdentification>
+                                /soap:Envelope/soap:Body/aip:PublishFlightDataInput/aip:FlightData/aip:PrimaryAircraft/aip:Registration</aip:ElementIdentification>
+                            <aip:Action>Update</aip:Action>
+                            <aip:Source>AMS</aip:Source>
+                            <aip:PreviousValue>TCLPH</aip:PreviousValue>
+                        </aip:ElementUpdateDetail>
+                        <aip:ElementUpdateDetail>
+                            <aip:ElementIdentification>
+                                /soap:Envelope/soap:Body/aip:PublishFlightDataInput/aip:FlightData/aip:LinkedFlightID/aip:FlightNature</aip:ElementIdentification>
+                            <aip:Action>Delete</aip:Action>
+                            <aip:Source>AMS</aip:Source>
+                            <aip:PreviousValue>ARRIVAL</aip:PreviousValue>
+                        </aip:ElementUpdateDetail>
+                        <aip:ElementUpdateDetail>
+                            <aip:ElementIdentification>
+                                /soap:Envelope/soap:Body/aip:PublishFlightDataInput/aip:FlightData/aip:LinkedFlightID/aip:Airport/aip:IATA</aip:ElementIdentification>
+                            <aip:Action>Delete</aip:Action>
+                            <aip:Source>AMS</aip:Source>
+                            <aip:PreviousValue>IST</aip:PreviousValue>
+                        </aip:ElementUpdateDetail>
+                        <aip:ElementUpdateDetail>
+                            <aip:ElementIdentification>
+                                /soap:Envelope/soap:Body/aip:PublishFlightDataInput/aip:FlightData/aip:LinkedFlightID/aip:Airport/aip:ICAO</aip:ElementIdentification>
+                            <aip:Action>Delete</aip:Action>
+                            <aip:Source>AMS</aip:Source>
+                            <aip:PreviousValue>LTFM</aip:PreviousValue>
+                        </aip:ElementUpdateDetail>
+                        <aip:ElementUpdateDetail>
+                            <aip:ElementIdentification>
+                                /soap:Envelope/soap:Body/aip:PublishFlightDataInput/aip:FlightData/aip:LinkedFlightID/aip:Airline/aip:IATA</aip:ElementIdentification>
+                            <aip:Action>Delete</aip:Action>
+                            <aip:Source>AMS</aip:Source>
+                            <aip:PreviousValue>TK</aip:PreviousValue>
+                        </aip:ElementUpdateDetail>
+                        <aip:ElementUpdateDetail>
+                            <aip:ElementIdentification>
+                                /soap:Envelope/soap:Body/aip:PublishFlightDataInput/aip:FlightData/aip:LinkedFlightID/aip:Airline/aip:ICAO</aip:ElementIdentification>
+                            <aip:Action>Delete</aip:Action>
+                            <aip:Source>AMS</aip:Source>
+                            <aip:PreviousValue>THY</aip:PreviousValue>
+                        </aip:ElementUpdateDetail>
+                        <aip:ElementUpdateDetail>
+                            <aip:ElementIdentification>
+                                /soap:Envelope/soap:Body/aip:PublishFlightDataInput/aip:FlightData/aip:LinkedFlightID/aip:FlightNumber</aip:ElementIdentification>
+                            <aip:Action>Delete</aip:Action>
+                            <aip:Source>AMS</aip:Source>
+                            <aip:PreviousValue>1322</aip:PreviousValue>
+                        </aip:ElementUpdateDetail>
+                        <aip:ElementUpdateDetail>
+                            <aip:ElementIdentification>
+                                /soap:Envelope/soap:Body/aip:PublishFlightDataInput/aip:FlightData/aip:LinkedFlightID/aip:AIPUniqueID</aip:ElementIdentification>
+                            <aip:Action>Delete</aip:Action>
+                            <aip:Source>AMS</aip:Source>
+                            <aip:PreviousValue>ARR_4498442</aip:PreviousValue>
+                        </aip:ElementUpdateDetail>
+                        <aip:ElementUpdateDetail>
+                            <aip:ElementIdentification>
+                                /soap:Envelope/soap:Body/aip:PublishFlightDataInput/aip:FlightData/aip:LinkedFlightID/aip:STO/aip:Date</aip:ElementIdentification>
+                            <aip:Action>Delete</aip:Action>
+                            <aip:Source>AMS</aip:Source>
+                            <aip:PreviousValue>2026-10-13</aip:PreviousValue>
+                        </aip:ElementUpdateDetail>
+                        <aip:ElementUpdateDetail>
+                            <aip:ElementIdentification>
+                                /soap:Envelope/soap:Body/aip:PublishFlightDataInput/aip:FlightData/aip:LinkedFlightID/aip:STO/aip:Time</aip:ElementIdentification>
+                            <aip:Action>Delete</aip:Action>
+                            <aip:Source>AMS</aip:Source>
+                            <aip:PreviousValue>14:10:00+03:00</aip:PreviousValue>
+                        </aip:ElementUpdateDetail>
+                        <aip:ElementUpdateDetail>
+                            <aip:ElementIdentification>/soap:Envelope/soap:Body/aip:PublishFlightDataInput/aip:FlightData/aip:ResourceAllocations/aip:ResourceAllocation[aip:Resource/aip:ResourceType=&quot;BAY&quot;
+                                and aip:Resource/aip:Code=&quot;B2&quot;]/aip:TimeSlot/aip:Start</aip:ElementIdentification>
+                            <aip:Action>Delete</aip:Action>
+                            <aip:Source>AMS</aip:Source>
+                            <aip:PreviousValue>2026-10-13T13:55:00+03:00</aip:PreviousValue>
+                        </aip:ElementUpdateDetail>
+                        <aip:ElementUpdateDetail>
+                            <aip:ElementIdentification>/soap:Envelope/soap:Body/aip:PublishFlightDataInput/aip:FlightData/aip:ResourceAllocations/aip:ResourceAllocation[aip:Resource/aip:ResourceType=&quot;BAY&quot;
+                                and aip:Resource/aip:Code=&quot;B2&quot;]/aip:TimeSlot/aip:Stop</aip:ElementIdentification>
+                            <aip:Action>Delete</aip:Action>
+                            <aip:Source>AMS</aip:Source>
+                            <aip:PreviousValue>2026-10-13T15:56:00+03:00</aip:PreviousValue>
+                        </aip:ElementUpdateDetail>
+                    </aip:ElementUpdateDetailCollection>
+                </aip:RecordMetadata>
+                <aip:FlightID>
+                    <aip:AIPUniqueID>DEP_4480988</aip:AIPUniqueID>
+                    <aip:Airline>
+                        <aip:IATA>TK</aip:IATA>
+                        <aip:ICAO>THY</aip:ICAO>
+                        <aip:Name Language="En">Turkish Airlines</aip:Name>
+                    </aip:Airline>
+                    <aip:FlightNumber>1785</aip:FlightNumber>
+                    <aip:STO>
+                        <aip:Date>2026-10-13</aip:Date>
+                        <aip:Time>16:00:00+03:00</aip:Time>
+                    </aip:STO>
+                    <aip:Airport>
+                        <aip:IATA>IST</aip:IATA>
+                        <aip:ICAO>LTFM</aip:ICAO>
+                        <aip:Name Language="En">ISTANBUL</aip:Name>
+                        <aip:Name Language="Tr">ISTANBUL</aip:Name>
+                        <aip:City>ISTANBUL</aip:City>
+                        <aip:Country>TURKEY</aip:Country>
+                    </aip:Airport>
+                    <aip:FlightNature>DEPARTURE</aip:FlightNature>
+                </aip:FlightID>
+                <aip:ServiceType>J</aip:ServiceType>
+                <aip:OperationalStatus>
+                    <aip:Code CodeContext="0000">OP</aip:Code>
+                </aip:OperationalStatus>
+                <aip:InternationalStatus>INTERNATIONAL</aip:InternationalStatus>
+                <aip:FlightEvents>
+                    <aip:FlightEvent Index="1">
+                        <aip:EventCode CodeContext="0000">de--_EstimatedDeparture</aip:EventCode>
+                        <aip:DateTime>2026-10-13T15:50:00+03:00</aip:DateTime>
+                    </aip:FlightEvent>
+                    <aip:FlightEvent Index="2">
+                        <aip:EventCode CodeContext="0000">de--_MostConfidentDepartureTime</aip:EventCode>
+                        <aip:DateTime>2026-10-13T15:56:00+03:00</aip:DateTime>
+                    </aip:FlightEvent>
+                    <aip:FlightEvent Index="3">
+                        <aip:EventCode CodeContext="0000">de--_MostConfidentOffChockTime</aip:EventCode>
+                        <aip:DateTime>2026-10-13T15:56:00+03:00</aip:DateTime>
+                    </aip:FlightEvent>
+                    <aip:FlightEvent Index="4">
+                        <aip:EventCode CodeContext="0000">de--_TargetOffBlock</aip:EventCode>
+                        <aip:DateTime>2026-10-13T15:56:00+03:00</aip:DateTime>
+                    </aip:FlightEvent>
+                    <aip:FlightEvent Index="5">
+                        <aip:EventCode CodeContext="0000">de--_EstimatedDeparture_Source09</aip:EventCode>
+                        <aip:DateTime>2026-10-13T15:50:00+03:00</aip:DateTime>
+                    </aip:FlightEvent>
+                </aip:FlightEvents>
+                <aip:PrimaryAircraft>
+                    <aip:Registration>TCLPT</aip:Registration>
+                    <aip:Type>
+                        <aip:IATA>32Q</aip:IATA>
+                        <aip:ICAO>A21N</aip:ICAO>
+                        <aip:Description>Airbus A321neo</aip:Description>
+                        <aip:AircraftConfiguration>
+                            <aip:MTO UnitOfMeasure="T">101000</aip:MTO>
+                            <aip:MaxPax>244</aip:MaxPax>
+                        </aip:AircraftConfiguration>
+                    </aip:Type>
+                    <aip:AircraftConfiguration>
+                        <aip:MTO UnitOfMeasure="T">89000</aip:MTO>
+                        <aip:MaxPax>190</aip:MaxPax>
+                    </aip:AircraftConfiguration>
+                </aip:PrimaryAircraft>
+                <aip:Route>
+                    <aip:Origin>
+                        <aip:IATA>IST</aip:IATA>
+                        <aip:ICAO>LTFM</aip:ICAO>
+                        <aip:Name Language="En">ISTANBUL</aip:Name>
+                        <aip:Name Language="Tr">ISTANBUL</aip:Name>
+                        <aip:City>ISTANBUL</aip:City>
+                        <aip:Country>TURKEY</aip:Country>
+                    </aip:Origin>
+                    <aip:Destination>
+                        <aip:IATA>CPH</aip:IATA>
+                        <aip:ICAO>EKCH</aip:ICAO>
+                        <aip:Name Language="En">COPENHAGEN AIRPORT</aip:Name>
+                        <aip:Name Language="Tr">KOPENHAG HAVALİMANI</aip:Name>
+                        <aip:City>COPENHAGEN</aip:City>
+                        <aip:Country>DENMARK</aip:Country>
+                    </aip:Destination>
+                </aip:Route>
+                <aip:Codeshares>
+                    <aip:Codeshare Index="1">
+                        <aip:Airline>
+                            <aip:IATA>3U</aip:IATA>
+                            <aip:ICAO>CSC</aip:ICAO>
+                            <aip:Name Language="En">China Sichuan Airlines</aip:Name>
+                        </aip:Airline>
+                        <aip:FlightNumber>7325</aip:FlightNumber>
+                    </aip:Codeshare>
+                    <aip:Codeshare Index="2">
+                        <aip:Airline>
+                            <aip:IATA>6E</aip:IATA>
+                            <aip:ICAO>IGO</aip:ICAO>
+                            <aip:Name Language="En">IndiGo Airlines</aip:Name>
+                        </aip:Airline>
+                        <aip:FlightNumber>4155</aip:FlightNumber>
+                    </aip:Codeshare>
+                    <aip:Codeshare Index="3">
+                        <aip:Airline>
+                            <aip:IATA>FI</aip:IATA>
+                            <aip:ICAO>ICE</aip:ICAO>
+                            <aip:Name Language="En">Icelandair</aip:Name>
+                        </aip:Airline>
+                        <aip:FlightNumber>7026</aip:FlightNumber>
+                    </aip:Codeshare>
+                    <aip:Codeshare Index="4">
+                        <aip:Airline>
+                            <aip:IATA>GF</aip:IATA>
+                            <aip:ICAO>GFA</aip:ICAO>
+                            <aip:Name Language="En">Gulf Air</aip:Name>
+                        </aip:Airline>
+                        <aip:FlightNumber>6007</aip:FlightNumber>
+                    </aip:Codeshare>
+                    <aip:Codeshare Index="5">
+                        <aip:Airline>
+                            <aip:IATA>PK</aip:IATA>
+                            <aip:ICAO>PIA</aip:ICAO>
+                            <aip:Name Language="En">Pakistan International Airlines</aip:Name>
+                        </aip:Airline>
+                        <aip:FlightNumber>5785</aip:FlightNumber>
+                    </aip:Codeshare>
+                    <aip:Codeshare Index="6">
+                        <aip:Airline>
+                            <aip:IATA>TG</aip:IATA>
+                            <aip:ICAO>THA</aip:ICAO>
+                            <aip:Name Language="En">Thai Airways International</aip:Name>
+                        </aip:Airline>
+                        <aip:FlightNumber>9154</aip:FlightNumber>
+                    </aip:Codeshare>
+                </aip:Codeshares>
+                <aip:ResourceAllocations>
+                    <aip:ResourceAllocation Index="1">
+                        <aip:Resource>
+                            <aip:ResourceType>BAY</aip:ResourceType>
+                            <aip:Code />
+                        </aip:Resource>
+                        <aip:TimeSlot>
+                            <aip:Start>2026-10-13T15:26:00+03:00</aip:Start>
+                            <aip:Stop>2026-10-13T15:56:00+03:00</aip:Stop>
+                        </aip:TimeSlot>
+                    </aip:ResourceAllocation>
+                    <aip:ResourceAllocation Index="2">
+                        <aip:Resource Location="Concourse B" Identifier="B2">
+                            <aip:ResourceType>GATE</aip:ResourceType>
+                            <aip:Code>B2</aip:Code>
+                        </aip:Resource>
+                        <aip:TimeSlot>
+                            <aip:Start>2026-10-13T15:26:00+03:00</aip:Start>
+                            <aip:Stop>2026-10-13T15:56:00+03:00</aip:Stop>
+                        </aip:TimeSlot>
+                    </aip:ResourceAllocation>
+                    <aip:ResourceAllocation Index="3">
+                        <aip:Resource Location="Concourse A" Identifier="MU_25A">
+                            <aip:ResourceType>CHUTE</aip:ResourceType>
+                            <aip:Code>MU_25A</aip:Code>
+                        </aip:Resource>
+                        <aip:TimeSlot>
+                            <aip:Start>2026-10-13T14:30:00+03:00</aip:Start>
+                            <aip:Stop>2026-10-13T16:00:00+03:00</aip:Stop>
+                        </aip:TimeSlot>
+                    </aip:ResourceAllocation>
+                    <aip:ResourceAllocation Index="4">
+                        <aip:Resource Location="Concourse A" Identifier="MU_31A">
+                            <aip:ResourceType>CHUTE</aip:ResourceType>
+                            <aip:Code>MU_31A</aip:Code>
+                        </aip:Resource>
+                        <aip:TimeSlot>
+                            <aip:Start>2026-10-13T14:30:00+03:00</aip:Start>
+                            <aip:Stop>2026-10-13T16:00:00+03:00</aip:Stop>
+                        </aip:TimeSlot>
+                    </aip:ResourceAllocation>
+                    <aip:ResourceAllocation Index="5">
+                        <aip:Resource Location="Concourse A" Identifier="MU_31B">
+                            <aip:ResourceType>CHUTE</aip:ResourceType>
+                            <aip:Code>MU_31B</aip:Code>
+                        </aip:Resource>
+                        <aip:TimeSlot>
+                            <aip:Start>2026-10-13T14:30:00+03:00</aip:Start>
+                            <aip:Stop>2026-10-13T16:00:00+03:00</aip:Stop>
+                        </aip:TimeSlot>
+                    </aip:ResourceAllocation>
+                </aip:ResourceAllocations>
+                <aip:FlightLoads>
+                    <aip:FlightLoad Index="1">
+                        <aip:Code CodeContext="0000">Il--_AdultTransferPax</aip:Code>
+                        <aip:Quantity>0</aip:Quantity>
+                    </aip:FlightLoad>
+                    <aip:FlightLoad Index="2">
+                        <aip:Code CodeContext="0000">Il--_AdultTransitPax</aip:Code>
+                        <aip:Quantity>0</aip:Quantity>
+                    </aip:FlightLoad>
+                    <aip:FlightLoad Index="3">
+                        <aip:Code CodeContext="0000">Il--_MostConfidentDepartingPax</aip:Code>
+                        <aip:Quantity>156</aip:Quantity>
+                    </aip:FlightLoad>
+                    <aip:FlightLoad Index="4">
+                        <aip:Code CodeContext="0000">Il--_TotalDepartingPax</aip:Code>
+                        <aip:Quantity>0</aip:Quantity>
+                    </aip:FlightLoad>
+                    <aip:FlightLoad Index="5">
+                        <aip:Code CodeContext="0000">Il--_TotalInternationalDomesticTransferPax</aip:Code>
+                        <aip:Quantity>0</aip:Quantity>
+                    </aip:FlightLoad>
+                    <aip:FlightLoad Index="6">
+                        <aip:Code CodeContext="0000">Il--_TotalInternationalInternationalTransferPax</aip:Code>
+                        <aip:Quantity>0</aip:Quantity>
+                    </aip:FlightLoad>
+                    <aip:FlightLoad Index="7">
+                        <aip:Code CodeContext="0000">Il--_TotalDomesticInternationalTransferPax</aip:Code>
+                        <aip:Quantity>0</aip:Quantity>
+                    </aip:FlightLoad>
+                    <aip:FlightLoad Index="8">
+                        <aip:Code CodeContext="0000">Il--_TotalDomesticDomesticTransferPax</aip:Code>
+                        <aip:Quantity>0</aip:Quantity>
+                    </aip:FlightLoad>
+                    <aip:FlightLoad Index="9">
+                        <aip:Code CodeContext="0000">Il--_TotalBookedPax</aip:Code>
+                        <aip:Quantity>0</aip:Quantity>
+                    </aip:FlightLoad>
+                    <aip:FlightLoad Index="10">
+                        <aip:Code CodeContext="0000">Il--_TotalAdultPax</aip:Code>
+                        <aip:Quantity>0</aip:Quantity>
+                    </aip:FlightLoad>
+                    <aip:FlightLoad Index="11">
+                        <aip:Code CodeContext="0000">Il--_TotalChildrenPax</aip:Code>
+                        <aip:Quantity>0</aip:Quantity>
+                    </aip:FlightLoad>
+                    <aip:FlightLoad Index="12">
+                        <aip:Code CodeContext="0000">Il--_TotalInfantPax</aip:Code>
+                        <aip:Quantity>0</aip:Quantity>
+                    </aip:FlightLoad>
+                    <aip:FlightLoad Index="13">
+                        <aip:Code CodeContext="0000">Il--_TotalOnBoardPax</aip:Code>
+                        <aip:Quantity>0</aip:Quantity>
+                    </aip:FlightLoad>
+                    <aip:FlightLoad Index="14">
+                        <aip:Code CodeContext="0000">TOTPAX</aip:Code>
+                        <aip:Quantity>0</aip:Quantity>
+                    </aip:FlightLoad>
+                    <aip:FlightLoad Index="15">
+                        <aip:Code CodeContext="0000">Il--_ChildrenTransitPax</aip:Code>
+                        <aip:Quantity>0</aip:Quantity>
+                    </aip:FlightLoad>
+                    <aip:FlightLoad Index="16">
+                        <aip:Code CodeContext="0000">Il--_TotalTransitPax</aip:Code>
+                        <aip:Quantity>0</aip:Quantity>
+                    </aip:FlightLoad>
+                    <aip:FlightLoad Index="17">
+                        <aip:Code CodeContext="0000">Il--_InfantTransitPax</aip:Code>
+                        <aip:Quantity>0</aip:Quantity>
+                    </aip:FlightLoad>
+                    <aip:FlightLoad Index="18">
+                        <aip:Code CodeContext="0000">Il--_TotalDeadHeadCrew</aip:Code>
+                        <aip:Quantity>0</aip:Quantity>
+                    </aip:FlightLoad>
+                    <aip:FlightLoad Index="19">
+                        <aip:Code CodeContext="0000">Il--_ChildTransferPax</aip:Code>
+                        <aip:Quantity>0</aip:Quantity>
+                    </aip:FlightLoad>
+                    <aip:FlightLoad Index="20">
+                        <aip:Code CodeContext="0000">Il--_InfantTransferPax</aip:Code>
+                        <aip:Quantity>0</aip:Quantity>
+                    </aip:FlightLoad>
+                    <aip:FlightLoad Index="21">
+                        <aip:Code CodeContext="0000">Il--_TotalTransferPax</aip:Code>
+                        <aip:Quantity>0</aip:Quantity>
+                    </aip:FlightLoad>
+                    <aip:FlightLoad Index="22">
+                        <aip:Code CodeContext="0000">Il--_TotalEmbarkingPax</aip:Code>
+                        <aip:Quantity>0</aip:Quantity>
+                    </aip:FlightLoad>
+                    <aip:FlightLoad Index="23">
+                        <aip:Code CodeContext="0000">Il--_TotalExemptPax</aip:Code>
+                        <aip:Quantity>0</aip:Quantity>
+                    </aip:FlightLoad>
+                    <aip:FlightLoad Index="24">
+                        <aip:Code CodeContext="0000">Il--_TotalLateTransferPax</aip:Code>
+                        <aip:Quantity>0</aip:Quantity>
+                    </aip:FlightLoad>
+                    <aip:FlightLoad Index="25">
+                        <aip:Code CodeContext="0000">Il--_ExemptTransferPax</aip:Code>
+                        <aip:Quantity>0</aip:Quantity>
+                    </aip:FlightLoad>
+                    <aip:FlightLoad Index="26">
+                        <aip:Code CodeContext="0000">Il--_TotalAdultPax_Source09</aip:Code>
+                        <aip:Quantity>0</aip:Quantity>
+                    </aip:FlightLoad>
+                    <aip:FlightLoad Index="27">
+                        <aip:Code CodeContext="0000">Il--_TotalChildrenPax_Source09</aip:Code>
+                        <aip:Quantity>0</aip:Quantity>
+                    </aip:FlightLoad>
+                    <aip:FlightLoad Index="28">
+                        <aip:Code CodeContext="0000">Il--_TotalInfantPax_Source09</aip:Code>
+                        <aip:Quantity>0</aip:Quantity>
+                    </aip:FlightLoad>
+                    <aip:FlightLoad Index="29">
+                        <aip:Code CodeContext="0000">Il--_TotalBookedPax_Source09</aip:Code>
+                        <aip:Quantity>156</aip:Quantity>
+                    </aip:FlightLoad>
+                    <aip:FlightLoad Index="30">
+                        <aip:Code CodeContext="0000">Il--_TotalDeadHeadCrew_Source09</aip:Code>
+                        <aip:Quantity>0</aip:Quantity>
+                    </aip:FlightLoad>
+                    <aip:FlightLoad Index="31">
+                        <aip:Code CodeContext="0000">Il--_TotalDomesticTransferPax</aip:Code>
+                        <aip:Quantity>0</aip:Quantity>
+                    </aip:FlightLoad>
+                    <aip:FlightLoad Index="32">
+                        <aip:Code CodeContext="0000">Il--_TotalInfantPax_Source27</aip:Code>
+                        <aip:Quantity>0</aip:Quantity>
+                    </aip:FlightLoad>
+                    <aip:FlightLoad Index="33">
+                        <aip:Code CodeContext="0000">Il--_TotalChildrenPax_Source27</aip:Code>
+                        <aip:Quantity>0</aip:Quantity>
+                    </aip:FlightLoad>
+                    <aip:FlightLoad Index="34">
+                        <aip:Code CodeContext="0000">Il--_TotalAdultPax_Source27</aip:Code>
+                        <aip:Quantity>0</aip:Quantity>
+                    </aip:FlightLoad>
+                    <aip:FlightLoad Index="35">
+                        <aip:Code CodeContext="0000">Il--_TotalDeadHeadCrew_Source27</aip:Code>
+                        <aip:Quantity>0</aip:Quantity>
+                    </aip:FlightLoad>
+                    <aip:FlightLoad Index="36">
+                        <aip:Code CodeContext="0000">Il--_InfantTransferPax_Source27</aip:Code>
+                        <aip:Quantity>0</aip:Quantity>
+                    </aip:FlightLoad>
+                    <aip:FlightLoad Index="37">
+                        <aip:Code CodeContext="0000">Il--_TotalMilitaryPax</aip:Code>
+                        <aip:Quantity>0</aip:Quantity>
+                    </aip:FlightLoad>
+                    <aip:FlightLoad Index="38">
+                        <aip:Code CodeContext="0000">Il--_TotalMilitaryTransferPax</aip:Code>
+                        <aip:Quantity>0</aip:Quantity>
+                    </aip:FlightLoad>
+                    <aip:FlightLoad Index="39">
+                        <aip:Code CodeContext="0000">Il--_TotalSoulsOnBoard</aip:Code>
+                        <aip:Quantity>0</aip:Quantity>
+                    </aip:FlightLoad>
+                    <aip:FlightLoad Index="40">
+                        <aip:Code CodeContext="0000">Il--_MostConfidentDepartingChargedPax</aip:Code>
+                        <aip:Quantity>0</aip:Quantity>
+                    </aip:FlightLoad>
+                    <aip:FlightLoad Index="41">
+                        <aip:Code CodeContext="0000">Il--_DepartingChargedPax</aip:Code>
+                        <aip:Quantity>0</aip:Quantity>
+                    </aip:FlightLoad>
+                    <aip:FlightLoad Index="42">
+                        <aip:Code CodeContext="0000">Il--_OnBoardInfantPax</aip:Code>
+                        <aip:Quantity>0</aip:Quantity>
+                    </aip:FlightLoad>
+                    <aip:FlightLoad Index="43">
+                        <aip:Code CodeContext="0000">Il--_PassengerNoGHT</aip:Code>
+                        <aip:Quantity>0</aip:Quantity>
+                    </aip:FlightLoad>
+                </aip:FlightLoads>
+                <aip:Terminal>1</aip:Terminal>
+                <aip:FlightHandlers>
+                    <aip:FlightHandler>
+                        <aip:Company>
+                            <aip:IATA>TGS</aip:IATA>
+                        </aip:Company>
+                        <aip:HandlerType>GROUND</aip:HandlerType>
+                    </aip:FlightHandler>
+                </aip:FlightHandlers>
+                <aip:CustomFields>
+                    <aip:AODBFields>
+                        <aip:KeyValue Key="S--G_CallSign">
+                            <aip:String>THY5NU</aip:String>
+                        </aip:KeyValue>
+                        <aip:KeyValue Key="S--G_CallSign_Source09">
+                            <aip:String>THY5NU</aip:String>
+                        </aip:KeyValue>
+                        <aip:KeyValue Key="S--G_RouteDuration">
+                            <aip:String>PT2H48M</aip:String>
+                        </aip:KeyValue>
+                        <aip:KeyValue Key="S--G_BlockFuelType">
+                            <aip:String>FuelUplift</aip:String>
+                        </aip:KeyValue>
+                        <aip:KeyValue Key="Dl-G_BlockFuelQuantity">
+                            <aip:Double>9501</aip:Double>
+                        </aip:KeyValue>
+                        <aip:KeyValue Key="S--G_BlockFuelUnit">
+                            <aip:String>Kilogram</aip:String>
+                        </aip:KeyValue>
+                        <aip:KeyValue Key="I--G_PBBTotalMinutes">
+                            <aip:Integer>0</aip:Integer>
+                        </aip:KeyValue>
+                        <aip:KeyValue Key="S--G_CallSign_Source99">
+                            <aip:String>THY5NU</aip:String>
+                        </aip:KeyValue>
+                        <aip:KeyValue Key="B--G_ThreePBBUsed">
+                            <aip:Boolean>false</aip:Boolean>
+                        </aip:KeyValue>
+                    </aip:AODBFields>
+                </aip:CustomFields>
+            </aip:FlightData>
+        </aip:PublishFlightDataInput>
+    </soap:Body>
+</soap:Envelope>

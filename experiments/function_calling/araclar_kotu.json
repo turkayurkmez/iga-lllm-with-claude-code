@@ -1,0 +1,22 @@
+[
+  {
+    "name": "flight_info",
+    "description": "Uçuşlarla ilgili bilgi verir.",
+    "input_schema": {
+      "type": "object",
+      "properties": {}
+    }
+  },
+  {
+    "name": "search",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "query": {
+          "type": "string"
+        }
+      },
+      "required": ["query"]
+    }
+  }
+]

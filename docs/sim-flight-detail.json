@@ -1,0 +1,25 @@
+{
+  "_id": {
+    "$oid": "6655ab5b78fc3a91c5bc7c13"
+  },
+  "Key": "356a2fc9",
+  "AircraftId": "4BB275",
+  "Latitude": 53.3498,
+  "Longitude": -2.27381,
+  "Track": 230,
+  "Altitude": 0,
+  "Speed": 14,
+  "Squawk": "3422",
+  "RadarId": "200",
+  "Type": "A21N",
+  "Registration": "TC-LSU",
+  "LastUpdate": 1716890458,
+  "Origin": "MAN",
+  "Destination": "IST",
+  "Flight": "TK1994",
+  "Onground": false,
+  "Vspeed": 0,
+  "Callsign": "THY9NV",
+  "SourceType": "ADS-B FR24 receivers",
+  "ETA": 0
+}
