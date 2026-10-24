@@ -50,6 +50,9 @@ istek*.json
 # ───────── Sentetik veri çıktısı ─────────
 synth/out/
 
+# ───────── Eval sonuçları ─────────
+eval/out/
+
 # ───────── Loglar ─────────
 *.log
 logs/
