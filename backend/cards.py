@@ -1,4 +1,4 @@
-"""Tool zarfından /chat kartları: source_chip, kpi_card, selection_card.
+"""Tool zarfından /chat olayları: source_chip, kpi_card, selection_card, map_command.
 
 Sözleşme docs/chat.md › Olay tipleri ve Kod garantileri'ndedir. Kartlar yalnızca
 zarftan (ve kpi_card açıklamaları kontrattan) kurulur; zarf yorumlanmaz: hesap,
@@ -9,6 +9,7 @@ from backend.envelope import ErrorCode
 from backend.tools._ortak import load_contract
 
 SUMMARY_TOOL = "get_flight_summary"
+MAP_TOOLS = ("focus_map_object", "highlight_map_set")
 
 
 def _error_code(envelope: dict) -> str | None:
@@ -48,6 +49,13 @@ def kpi_card(name: str, envelope: dict) -> dict | None:
     }
 
 
+def map_command(name: str, envelope: dict) -> dict | None:
+    """Başarılı harita tool'unun value'su, olduğu gibi (docs/harita.md › map_command)."""
+    if name not in MAP_TOOLS or envelope["error"] is not None:
+        return None
+    return envelope["value"]
+
+
 def selection_card(envelope: dict) -> dict | None:
     """AMBIGUOUS_ENTITY zarfının adayları; kod aday seçmez (Kod garantileri 5)."""
     if _error_code(envelope) != ErrorCode.AMBIGUOUS_ENTITY:
@@ -68,7 +76,7 @@ class CardBuilder:
         self._chips: set[tuple] = set()
 
     def cards(self, name: str, envelope: dict) -> list[tuple[str, dict]]:
-        """Zarfın olayları, sırasıyla: çip (yeni ise), ardından kpi ya da seçim kartı."""
+        """Zarfın olayları, sırasıyla: çip (yeni ise), ardından kpi, seçim kartı ya da komut."""
         events = []
         chip = source_chip(name, envelope)
         if chip is not None:
@@ -82,4 +90,7 @@ class CardBuilder:
         selection = selection_card(envelope)
         if selection is not None:
             events.append(("selection_card", selection))
+        command = map_command(name, envelope)
+        if command is not None:
+            events.append(("map_command", command))
         return events

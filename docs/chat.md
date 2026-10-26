@@ -4,15 +4,20 @@
 
 ## Uç
 
-`POST /chat`, gövde `{"message": "..."}`. Cevap `text/event-stream; charset=utf-8`. Chat belleği yoktur: her istek tek, kendi kendine yeten bir sorudur.
+`POST /chat`, gövde `{"message": "..."}` ya da haritada seçili nesneyle `{"message": "...", "selected": {"object_type": "flight", "id": "TK2345"}}` (`selected` isteğe bağlıdır; sözleşmesi `docs/harita.md` › Haritadan sohbete bağlam). Cevap `text/event-stream; charset=utf-8`. Chat belleği yoktur: her istek tek, kendi kendine yeten bir sorudur.
 
 Akış başlamadan önceki hatalar HTTP durum koduyla döner, olay üretilmez, model çağrılmaz:
 
 | Durum | Kod | Gövde |
 |---|---|---|
 | Mesaj boş ya da yalnızca boşluk | `422` | FastAPI doğrulama gövdesi |
+| `selected` yanlış biçimli (açık `null`, bilinmeyen `object_type`, `object_type`'a uymayan `id`, fazla alan) | `422` | FastAPI doğrulama gövdesi |
+| `selected` nesnesi veride yok (`docs/harita.md` › Haritadan sohbete bağlam) | `422` | `{"detail": [{"type": "value_error", "loc": ["body", "selected"], "msg": "..."}]}` |
+| `selected` doğrulanırken veri okunamadı | `503` | `{"detail": SELECTED_UNAVAILABLE_MESSAGE}` (`backend/main.py`) |
 | `ANTHROPIC_*` eksik (`ConfigError`) | `503` | `{"detail": CONFIG_ERROR_MESSAGE}` (`backend/main.py`) |
 | Bilinmeyen talimat sürümü (`COPILOT_INSTRUCTION`) | `503` | Aynı genel ayar mesajı |
+
+`selected` doğrulaması `ANTHROPIC_*` denetiminden önce yapılır; `selected` yokken bu satırlar geçerli değildir. Geçerli `selected` modele gidecek mesajın başına, ayrı bir satır olarak `Haritada seçili: flight TK2345` notunu ekler. Audit satırına giren soru orijinal mesajdır (`docs/audit.md`).
 
 Akış başladıktan sonra durum kodu her zaman `200`'dür; hatalar `error` olayıyla bildirilir.
 
@@ -30,6 +35,7 @@ Alan adları `AgentResult` ile aynıdır (`docs/agent.md` › Sonuç). Tablo kap
 | `source_chip` | Kaynağı olan her tool sonucundan sonra (Kod garantileri 3) | `{"tool": "...", "source": "...", "as_of": "...", "stale": false, "error_code": null}` |
 | `kpi_card` | `get_flight_summary` zarfında `error` `null` ise | `{"tool": "...", "items": [{"field": "...", "description": "...", "value": 0}], "source": "...", "as_of": "..."}` |
 | `selection_card` | Zarf `AMBIGUOUS_ENTITY` ise | `{"query": "...", "message": "...", "candidates": [<aday>, ...], "source": "...", "as_of": "..."}` |
+| `map_command` | `focus_map_object` ya da `highlight_map_set` zarfında `error` `null` ise (`docs/harita.md` › `map_command` olayı) | Zarfın `value`'su olduğu gibi: `{"command": "...", "object_type": "...", "id": "..."}` ya da `{"command": "...", "object_type": "...", "ids": ["..."]}` |
 | `text_delta` | Döngü `tamam` ile bitince, nihai cevabın metni | `{"text": "..."}` |
 | `error` | Döngü `tamam` dışı bir durumla bitti ya da model çağrısı başarısız | `{"code": "...", "message": "..."}` |
 | `done` | Döngü beş bitiş durumundan biriyle bitti | `{"status": "...", "reason": null, "turns": 0, "instruction": {"name": "...", "version": "...", "summary": "..."}, "audit_id": "..."}` |
@@ -44,7 +50,7 @@ Alan adları `AgentResult` ile aynıdır (`docs/agent.md` › Sonuç). Tablo kap
 
 Model çağrıları `docs/agent.md`'deki gibi `messages.create`'tir; bir turun metni tur bitip `stop_reason` belli olana kadar tutulur.
 
-Döngü sürerken (tur `tool_use` ile bitti, sınır aşılmadı) bir turda: her tool isteği için, yanıttaki sırayla `tool_call`; sonra her sonuç için (istek sırasıyla) `source_chip` (varsa), ardından varsa `kpi_card` veya `selection_card`. Sonraki tur aynı biçimde sürer.
+Döngü sürerken (tur `tool_use` ile bitti, sınır aşılmadı) bir turda: her tool isteği için, yanıttaki sırayla `tool_call`; sonra her sonuç için (istek sırasıyla) `source_chip` (varsa), ardından varsa `kpi_card`, `selection_card` ya da `map_command`. Sonraki tur aynı biçimde sürer.
 
 Döngü bitince:
 
@@ -116,7 +122,7 @@ Eksik alan kuralı (ilke 6'nın ilk yarısı) ve belirsizlik kuralı (ilke 5) v1
 
 `docs/http.md` › Arayüz kuralları'ndaki zarf kuralları burada da geçerlidir.
 
-1. Akış `fetch` ile okunur (POST gövdesi gerekir); çerçeveler `event:` ve `data:` satırlarından ayrıştırılır. Tablodaki yedi tip dışındaki olay yok sayılır.
+1. Akış `fetch` ile okunur (POST gövdesi gerekir); çerçeveler `event:` ve `data:` satırlarından ayrıştırılır. Tablodaki sekiz tip dışındaki olay yok sayılır (`map_command`'ı işleyen kod `docs/harita.md` › Arayüz işleyicisi'ndedir; o gelene kadar `chat.ts` olayı yok sayar).
 2. `text_delta` geldiği sırayla eklenir; `tool_call` küçük bir satır (tool adı ve ham `input` gösterilmez; `docs/system-talimat.md` › Cevap metni); çip ve kartlar olay verisini olduğu gibi gösterir. `as_of` `+03:00` saatiyle gösterilir, tarayıcı saatine çevrilmez; yaş hesaplanmaz, `stale` yeniden türetilmez.
 3. Seçim kartındaki bir aday seçilince yeni bir soru gönderilir: orijinal soru ile seçilen adayın `flight_no` ve `registration`'ı, zarftaki yazımıyla. Chat belleği olmadığı için orijinal soru yeni mesajda tekrar edilir.
 4. `error` olayı kullanıcıya `message` alanıyla gösterilir; `code` ve teknik ayrıntı gösterilmez. `error`'dan önce gelen çip ve kartlar cevap sayılmaz.
