@@ -1,14 +1,14 @@
 """get_flight_details: tek uçuşun kaydı, hareketi, gecikmesi ve son konumu.
 
 Sözleşme docs/tools.md'dedir. Uçuş flight_id ile tam eşitlikle aranır. Konum,
-ts'si backend.clock.now()'a eşit ya da ondan önce olan kayıtların sonuncusudur.
-Tool zarfı kurmaz ve sistem saatini doğrudan okumaz; {value, source, error?}
-döndürür.
+ts'si backend.clock.operational_now()'a eşit ya da ondan önce olan kayıtların
+sonuncusudur; canlı modda kaynak dosya değil canlı depodur. Tool zarfı kurmaz ve
+sistem saatini doğrudan okumaz; {value, source, error?} döndürür.
 """
 
 from datetime import datetime
 
-from backend import clock
+from backend import clock, live
 from backend.envelope import ErrorCode
 from backend.tools._ortak import DataError, load_data
 
@@ -40,6 +40,14 @@ DELAY_FIELDS = {
     "category": "delay_category",
 }
 POSITION_FIELDS = ("ts", "lat", "lon", "heading_deg", "speed_kt", "phase")
+# Canlı kayıt alanı → position alanı (docs/tools.md › get_flight_details › Canlı mod).
+# ts LastUpdate'ten ayrıca kurulur; phase canlı kayıtta yoktur.
+LIVE_POSITION_FIELDS = {
+    "Latitude": "lat",
+    "Longitude": "lon",
+    "Track": "heading_deg",
+    "Speed": "speed_kt",
+}
 
 NOT_FOUND = {
     "code": ErrorCode.NOT_FOUND,
@@ -78,8 +86,25 @@ def _timestamp(raw: object) -> datetime:
     return ts
 
 
+def _live_position(hub: live.LiveHub, flight_no: object) -> dict | None:
+    """Canlı depoda Flight = flight_no ve LastUpdate ≤ operasyonel saat olan son kayıt."""
+    now = clock.operational_now().timestamp()
+    candidates = [
+        record
+        for record in hub.positions_for_flight(flight_no)
+        if record["LastUpdate"] <= now
+    ]
+    if not candidates:
+        return None
+    record = max(candidates, key=lambda r: r["LastUpdate"])
+    position = {
+        "ts": datetime.fromtimestamp(record["LastUpdate"], clock.TZ).isoformat()
+    }
+    return position | _copy(record, LIVE_POSITION_FIELDS.items())
+
+
 def _last_position(positions: list[dict], flight_id: str) -> dict | None:
-    now = clock.now()
+    now = clock.operational_now()
     latest = None
     latest_ts = None
     for record in positions:
@@ -109,7 +134,14 @@ def get_flight_details(flight_id: str) -> dict:
     value = _copy(flight, ((f, f) for f in FLIGHT_FIELDS))
     value |= _copy(_first(movements, flight_id), ((f, f) for f in MOVEMENT_FIELDS))
     value |= _copy(_first(delays, flight_id), DELAY_FIELDS.items())
+    # Dosyadaki iz canlı modda da taranır: veri hataları iki modda aynı kalır.
     position = _last_position(positions, flight_id)
-    if position is not None:
+    hub = live.active()
+    if hub is not None:
+        # Canlı modda dosyaya geri düşülmez; eşleşme yoksa position yazılmaz.
+        live_position = _live_position(hub, flight.get("flight_no"))
+        if live_position is not None:
+            value["position"] = live_position
+    elif position is not None:
         value["position"] = _copy(position, ((f, f) for f in POSITION_FIELDS))
     return {"value": value, "source": source}

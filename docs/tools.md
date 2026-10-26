@@ -14,7 +14,8 @@ Modülün dışarıya açtığı yalnızca iki giriş noktası vardır:
 | `tool_definitions` | `tool_definitions() -> list[dict]` | Üç tool'un Anthropic tool tanımı (`name`, `description`, `input_schema`), bu belgedeki sırayla. | `messages.create(tools=...)`. |
 
 - `run_tool`, zarfı `backend/envelope.py` › `call_tool` ile kurar. Tool zarfı kendisi kurmaz; yalnızca `{value, source, data_time?, error?}` döndürür. `as_of` ve `stale`'i katman hesaplar (`docs/zarf.md` › Tool ne döndürür).
-- Tool sistem saatini kendisi okumaz. O anki zaman gerekiyorsa (yalnızca `get_flight_details` › konum seçimi) `backend/clock.py` › `now()`'dan alınır.
+- Tool sistem saatini kendisi okumaz. O anki zaman gerekiyorsa (yalnızca `get_flight_details` › konum seçimi) `backend/clock.py` › `operational_now()`'dan alınır; zarfın `as_of`'u da bu saattir.
+- **Operasyonel saat.** Canlı mod kapalıyken `operational_now()` = `now()` (`COPILOT_NOW`, boşsa sistem saati); davranış öncekiyle aynıdır. Canlı mod açıkken (`docs/canli_akis.md` › Canlı mod ve tool'lar) ve tüketici bir `clock` mesajı almışsa simüle andır (`clock.epoch`, `+03:00`); saat mesajı henüz yoksa yine `now()`. Audit kayıtlarının zamanı `now()`'da kalır.
 - `tool_definitions`'taki `input_schema`, `run_tool`'un argüman doğrulamasında kullanılan modelle aynı parametreleri, zorunlu alanları ve enum'ları tanımlar. Açıklamalar "ne döndürür / ne zaman kullanılır / ne zaman KULLANILMAZ" bölümlerini, enum değerlerini ve örnek değer içerir (CLAUDE.md › Kurallar).
 - Üç tool'un `tool_version`'ı `1.0.0`'dır. Hiçbirinde tazelik eşiği (`ToolSpec.max_age`) tanımlı değildir; bu yüzden `stale` her zaman `false` olur ve `STALE_DATA` dönmez.
 
@@ -181,12 +182,29 @@ Tek bir uçuşun kaydını, hareketini, gecikmesini ve son konumunu döndürür.
 | `delay_minutes` | tamsayı | `delays.delay_minutes` | `25` |
 | `delay_code` | metin | `delays.delay_code` | `"82"` |
 | `delay_category` | metin | `delays.category` (ad çakışmasın diye önekli) | `"ATC_RESTRICTION"` |
-| `position` | nesne | `positions`'ta bu uçuşun `ts`'si `clock.now()`'a eşit ya da ondan önce olan kayıtları arasında `ts`'si en büyük olanı; alanları `ts`, `lat`, `lon`, `heading_deg`, `speed_kt`, `phase` | `{"ts": "2026-10-20T16:22:00+03:00", "lat": 41.05, "lon": 28.4, "heading_deg": 235.0, "speed_kt": 280.0, "phase": "CLIMB"}` |
+| `position` | nesne | `positions`'ta bu uçuşun `ts`'si `clock.operational_now()`'a eşit ya da ondan önce olan kayıtları arasında `ts`'si en büyük olanı; alanları `ts`, `lat`, `lon`, `heading_deg`, `speed_kt`, `phase`. Canlı modda kaynak canlı depodur (aşağıda › Canlı mod) | `{"ts": "2026-10-20T16:22:00+03:00", "lat": 41.05, "lon": 28.4, "heading_deg": 235.0, "speed_kt": 280.0, "phase": "CLIMB"}` |
 
 - `flights.status` döndürülmez (üreteçten gelmez, `docs/spec.md` §6).
 - Kaynakta olmayan ya da `null` olan her alan `value`'ya yazılmaz; `position` nesnesinin alanları için de aynı kural geçerlidir. Gecikmesi olmayan uçuşta `delay_*` alanları, konumu olmayan uçuşta `position` yoktur.
 - `ts` karşılaştırması metinle değil zaman damgasıyla yapılır.
 - Zorunlu alanlar (yoksa veri hatası): her `flights`, `movements`, `delays`, `positions` kaydında `flight_id`; seçilen uçuşun her `positions` kaydında `ts`.
+
+**Canlı mod.** Canlı mod açıkken `position` dosyadaki `positions` tablosundan değil canlı depodan (`docs/canli_akis.md` › Depo) gelir. Diğer alanlar ve veri hataları değişmez; `positions` tablosu yine okunur ve doğrulanır, ama konum için kullanılmaz.
+
+- **Aday kayıtlar:** depoda görünür olan, `Flight` = uçuşun `flight_no`'su ve `LastUpdate` ≤ `operational_now()` olan kayıtlar. Aralarından `LastUpdate`'i en büyük olan seçilir.
+- **Alan eşlemesi:**
+
+  | `position` alanı | Canlı kayıttaki karşılığı |
+  |---|---|
+  | `ts` | `LastUpdate` (ISO 8601, `+03:00`) |
+  | `lat` | `Latitude` |
+  | `lon` | `Longitude` |
+  | `heading_deg` | `Track` |
+  | `speed_kt` | `Speed` |
+
+- `phase` canlı kayıtta yoktur, yazılmaz. Kayıtta olmayan alan da yazılmaz.
+- Eşleşen canlı kayıt yoksa `position` yazılmaz; dosyaya geri düşülmez.
+- Kontrat ve `tool_version` değişmez.
 
 `data_time` verilmez; `as_of` çağrı anındaki saattir. Konumun ait olduğu an `position.ts`'dedir ve `as_of`'tan farklı olabilir. Konumun tazeliği bu tool'da denetlenmez (`stale: false`); tazelik eşikli konum sorgusu ayrı bir tool'un (`get_flight_position`, `docs/zarf.md` › Örnekler) işidir.
 
@@ -205,7 +223,7 @@ Tek bir uçuşun kaydını, hareketini, gecikmesini ve son konumunu döndürür.
 | `undefined_flight` uygulanmış veride hedefin `flight_id`'si | `NOT_FOUND`; yetim `movements`, `positions`, `delays` kullanılmaz | Kaydın bulunamadığını söyler; uygunsa veri tutarsızlığını belirtir; yetim kayıtlardan bilgi kurmaz. |
 | İptal edilen uçuş | `cancelled: true`; `movement_type` vardır; `stand_code`, `gate_code`, `actual_*`, `delay_*`, `position` yoktur (kaynakta `null` ya da kayıt yok) | Uçuşun iptal olduğunu söyler; stand, gate ya da konum uydurmaz. |
 | Gecikmesiz uçuş | `delay_*` alanları yok; `estimated_time` `scheduled_time`'a eşit | Gecikme olmadığını söyler. |
-| Konum izi henüz başlamamış (tüm `ts` değerleri `clock.now()`'dan sonra) | `position` yok | Konum verisi olmadığını söyler; gelecekteki iz noktasını vermez. |
+| Konum izi henüz başlamamış (tüm `ts` değerleri `clock.operational_now()`'dan sonra) | `position` yok | Konum verisi olmadığını söyler; gelecekteki iz noktasını vermez. |
 | Konum izi bitmiş (inmiş, ya da kalkıp izden çıkmış uçuş) | `position` izin son noktasıdır; `position.ts` `as_of`'tan eski olabilir | Konumu `position.ts` zaman damgasıyla verir; güncelmiş gibi sunmaz. |
 | `stale_position` uygulanmış veri | `position` kalan son noktadır (10 dakika eski); `stale: false`, `error: null` | Konumu `position.ts` ile verir ve `as_of`'tan eski olduğunu söyler; ara değerleme yapmaz, block zamanından konum çıkarmaz. |
 | `movements`'ta saatten sonraki `actual_*` zamanı | Kaynaktaki haliyle döner; tool `actual_*` alanlarını saate göre süzmez | Alanı kaynaktaki değeriyle verir; durumu (`ACTIVE`/`COMPLETED`) kendisi türetmez. |

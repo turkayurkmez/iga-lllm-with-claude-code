@@ -162,7 +162,8 @@ def call_tool(registry: Mapping[str, ToolSpec], name: str, args: Any) -> dict:
             message=OUTPUT_INVALID,
         )
 
-    now = clock.now()
+    # Operasyonel saat: canlı modda simüle an (docs/tools.md › Operasyonel saat).
+    now = clock.operational_now()
     as_of = (output.data_time or now).astimezone(clock.TZ)
     common = {
         "value": output.value,

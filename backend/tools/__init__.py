@@ -27,6 +27,12 @@ from backend.tools._ortak import (
 )
 from backend.tools.get_flight_details import get_flight_details
 from backend.tools.get_flight_summary import get_flight_summary
+from backend.tools.harita import (
+    check_focus,
+    check_highlight,
+    focus_map_object,
+    highlight_map_set,
+)
 from backend.tools.resolve_flight_identity import resolve_flight_identity
 
 __all__ = ["run_tool", "tool_definitions"]
@@ -39,6 +45,14 @@ IMPLEMENTATIONS: dict[str, Callable[..., dict]] = {
     "get_flight_summary": get_flight_summary,
     "resolve_flight_identity": resolve_flight_identity,
     "get_flight_details": get_flight_details,
+    "focus_map_object": focus_map_object,
+    "highlight_map_set": highlight_map_set,
+}
+
+# Şemanın anlatamadığı argüman kuralları (yalnızca olan tool'lar).
+ARG_CHECKS: dict[str, Callable[[dict], str | None]] = {
+    "focus_map_object": check_focus,
+    "highlight_map_set": check_highlight,
 }
 
 
@@ -57,7 +71,7 @@ def _build_registry() -> dict[str, ToolSpec]:
             name=name,
             version=contract["version"],
             func=IMPLEMENTATIONS.get(name, _not_implemented(name)),
-            args_model=args_model(contract["input_schema"]),
+            args_model=args_model(contract["input_schema"], ARG_CHECKS.get(name)),
         )
     return registry
 
@@ -66,7 +80,7 @@ REGISTRY = _build_registry()
 
 
 def tool_definitions() -> list[dict]:
-    """Üç tool'un Anthropic tool tanımı; kontrat dosyaları her çağrıda okunur."""
+    """Tool'ların Anthropic tool tanımı; kontrat dosyaları her çağrıda okunur."""
     definitions = []
     for name in TOOL_NAMES:
         contract = load_contract(name)

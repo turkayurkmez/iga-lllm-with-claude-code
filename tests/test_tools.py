@@ -25,7 +25,13 @@ CONTRACTS = REPO_ROOT / "backend" / "tools" / "contracts"
 REFERENCE = "data/referans/seed42-2026-10-20.json"
 NOW = "2026-10-20T16:22:00+03:00"
 VERSION = "1.0.0"
-TOOL_NAMES = ["get_flight_summary", "resolve_flight_identity", "get_flight_details"]
+TOOL_NAMES = [
+    "get_flight_summary",
+    "resolve_flight_identity",
+    "get_flight_details",
+    "focus_map_object",
+    "highlight_map_set",
+]
 
 NOT_FOUND = {"code": "NOT_FOUND", "message": "Bu kimlikle uçuş bulunamadı."}
 AMBIGUOUS = {
@@ -343,6 +349,8 @@ VALID_ARGS = {
     "get_flight_summary": {"direction": "all"},
     "resolve_flight_identity": {"query": "TK2345"},
     "get_flight_details": {"flight_id": TK2345_ID},
+    "focus_map_object": {"object_type": "stand", "id": "C101"},
+    "highlight_map_set": {"object_type": "stand", "ids": ["C101", "C102"]},
 }
 
 
@@ -398,6 +406,8 @@ def test_gecersiz_json_veri_hatasi_doner(name, content, monkeypatch, tmp_path):
         ("get_flight_details", "movements"),
         ("get_flight_details", "delays"),
         ("get_flight_details", "positions"),
+        ("focus_map_object", "stands"),
+        ("highlight_map_set", "stands"),
     ],
 )
 def test_kullanilan_ust_anahtar_yoksa_veri_hatasi_doner(
