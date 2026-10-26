@@ -105,7 +105,7 @@ Bu kurallardan biri bozulursa sonuç şema hatasıyla aynıdır: `SCHEMA_VALIDAT
 - İşleyici konumu ve durumu SSE'den (`flight`) ya da `GET /map/stands`'ten (`stand`) alır; komut koordinat taşımaz. Konum kaydırılmaz, ara değerleme yapılmaz.
 - Bayat konum (`stale: true`) olduğu gibi gösterilir ve işaretlenir; komut onu güncelmiş yapmaz.
 - İstemcide artık bulunmayan nesne (ör. vurgudan sonra `removed` gelen uçuş, listede olmayan stand) sessizce atlanır; hata gösterilmez, harita çökmez. Kalan nesneler uygulanır.
-- Harita ekranı açık değilse (ör. `/sohbet`) komutlar uygulanmaz ve kuyruğa alınmaz; yalnızca açık ekran uygular. Sohbet ekranında komut kullanıcıya gösterilmez ve metne eklenmez.
+- Harita `/sohbet`'te sohbetin yanındadır; komutlar o ekranda uygulanır. Harita ekranı yoksa (ör. `/` ya da `/canli`) komutlar uygulanmaz ve kuyruğa alınmaz. Komut kullanıcıya gösterilmez ve metne eklenmez.
 - İşleyici kullanıcının elle yaptığı pan/zoom'u engellemez. Komut yalnızca kendi anında uygulanır; sonraki elle hareket komutun etkisini bozmaz.
 - Komut işleyicisi `fetch`/`POST` yapmaz; ağ çağrısı yalnızca mevcut SSE ve `/map/stands` yoluyla olur.
 
@@ -115,9 +115,9 @@ Sohbetin belleği yoktur (`docs/sorumluluk-zinciri.md` › Açık soru 1); her m
 
 - **Seçim:** haritada bir uçağa ya da stand'e tıklamak o nesneyi seçili yapar (`focus_map_object` ile aynı durum). Seçili nesne tektir; boş alana tıklamak ya da seçili nesneye yeniden tıklamak seçimi kaldırır.
 - **İstek:** `POST /chat` gövdesi isteğe bağlı `selected` alanı alır: `{"message": "...", "selected": {"object_type": "flight", "id": "TK2345"}}`. `selected` yoksa gövde bugünkü gibidir (`docs/chat.md` › Uç). `object_type` ve `id` yukarıdaki tablodaki değerlerdir; `selected` başka alan içermez, yanlış biçimli `selected` 422 verir.
-- **Sunucu:** `selected` modele ayrı bir kullanıcı bloğu olarak, kullanıcı mesajından önce, kodda üretilen sabit biçimle verilir: `Haritada seçili: flight TK2345`. Kimlik modele olduğu gibi gider; sunucu onu doğrulamaz, çözmez, mesaja karışmaz. Mesajda başka bir uçuş anılıyorsa mesaj geçerlidir, seçim yalnızca bağlamdır.
+- **Sunucu:** `selected` model çağrılmadan önce doğrulanır; geçersizse ya da nesne veride yoksa `422` döner, model çağrılmaz, olay ve audit satırı üretilmez (`docs/chat.md` › Uç). Biçim `docs/harita.md` › Tool doğrulaması › Kimlik biçimi gibi `object_type`'a göredir. "Veride yok" tool'larla aynı kuraldır (`backend/tools/harita.py` › `exists`): stand için `stands`'te `stand_code` eşitliği, uçuş için canlı depoda görünür konum (`LastUpdate` ≤ operasyonel saat); canlı mod kapalıyken her uçuş için `422`. Veri okunamazsa `503`. Geçerliyse not, kodda üretilen sabit biçimle tek satır olarak modele giden mesajın başına eklenir: `Haritada seçili: flight TK2345` + satır sonu + kullanıcı mesajı. Audit'e orijinal mesaj yazılır, not girmez. Mesajda başka bir uçuş anılıyorsa mesaj geçerlidir, seçim yalnızca bağlamdır.
 - **Model:** seçili nesne bir tool girişi olarak yalnızca kullanıcının mesajı onu ima ediyorsa ("burası", "bu uçak") kullanılır. Seçili nesneyle ilgili veri sorusu yine tool'la cevaplanır; model seçimden operasyonel bilgi çıkarmaz.
-- **Arayüz:** `Chat.tsx` açık harita ekranında seçimi bir sonraki gönderiye ekler; gönderim sonrası seçim kalkmaz (kullanıcı kaldırana kadar sürer). Seçim yoksa `selected` alanı gönderilmez.
+- **Arayüz:** `Chat.tsx` açık harita ekranında seçimi bir sonraki gönderiye ekler; gönderim sonrası seçim kalkmaz (kullanıcı kaldırana kadar sürer). Seçim yoksa `selected` alanı gönderilmez. Seçili nesne yazı alanının üstünde `Bağlam: <id> ×` çipi olarak görünür (× seçimi kaldırır); gönderilen her turun sorusunun altında o mesajla giden bağlam çipi kalıcı kalır ve sonradan değişen seçimden etkilenmez.
 
 ## Etkilenen belgeler
 

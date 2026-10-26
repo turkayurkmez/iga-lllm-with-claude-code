@@ -1,6 +1,6 @@
 // POST /chat istemcisi. Yanıt SSE akışıdır; olaylar docs/chat.md › Olay tipleri'ndedir:
-// tool_call, source_chip, kpi_card, selection_card, text_delta, ardından done ya da
-// error. EventSource POST desteklemediği için gövde fetch akışından okunup olaylar
+// tool_call, source_chip, kpi_card, selection_card, map_command, text_delta, ardından
+// done ya da error. EventSource POST desteklemediği için gövde fetch akışından okunup olaylar
 // burada ayrıştırılır. Olay verisi olduğu gibi iletilir; yeniden hesaplanmaz.
 
 export const NETWORK_MESSAGE = 'Sunucuya ulaşılamadı.'
@@ -51,6 +51,19 @@ export interface SelectionCard {
   as_of: string | null
 }
 
+// Harita komutu: zarfın value'su olduğu gibi (docs/harita.md › map_command olayı).
+export type ObjectType = 'flight' | 'stand'
+
+export type MapCommand =
+  | { command: 'focus_map_object'; object_type: ObjectType; id: string }
+  | { command: 'highlight_map_set'; object_type: ObjectType; ids: string[] }
+
+// Haritada seçili nesne; sonraki mesaja eklenir (docs/harita.md › Haritadan sohbete bağlam).
+export interface SelectedObject {
+  object_type: ObjectType
+  id: string
+}
+
 export interface Done {
   status: string
   reason: string | null
@@ -65,6 +78,7 @@ export interface ChatHandlers {
   onChip: (chip: SourceChip) => void
   onKpi: (card: KpiCard) => void
   onSelection: (card: SelectionCard) => void
+  onMapCommand: (command: MapCommand) => void
   onText: (text: string) => void
   onDone: (done: Done) => void
   // Sunucunun genel Türkçe mesajı ya da istemcinin kendi genel mesajı.
@@ -160,6 +174,21 @@ function isSelection(
   )
 }
 
+function isObjectType(value: unknown): value is ObjectType {
+  return value === 'flight' || value === 'stand'
+}
+
+// Bilinen bir command, object_type ∈ {flight, stand}; focus için metin id, highlight için
+// metin dizisi ids (docs/harita.md › Arayüz işleyicisi). Aksi halde olay yok sayılır.
+function isMapCommand(data: Record<string, unknown>): data is Record<string, unknown> & MapCommand {
+  if (!isObjectType(data.object_type)) return false
+  if (data.command === 'focus_map_object') return isString(data.id)
+  if (data.command === 'highlight_map_set') {
+    return Array.isArray(data.ids) && data.ids.every(isString)
+  }
+  return false
+}
+
 function isDone(data: Record<string, unknown>): data is Record<string, unknown> & Done {
   const { instruction } = data
   return (
@@ -177,8 +206,18 @@ function isDone(data: Record<string, unknown>): data is Record<string, unknown> 
 async function errorDetail(response: Response): Promise<string> {
   try {
     const body = parseData(await response.text())
-    // 422'de FastAPI detail'i bir liste olarak döner; yalnızca metin olanı gösterilir.
-    return body !== null && isString(body.detail) ? body.detail : REQUEST_MESSAGE
+    if (body === null) return REQUEST_MESSAGE
+    if (isString(body.detail)) return body.detail
+    // 422'de detail bir listedir; yalnızca selected hakkındaki mesaj gösterilir
+    // (ör. nesne veride yok). Diğer doğrulama mesajları genel mesaja düşer.
+    if (Array.isArray(body.detail)) {
+      for (const item of body.detail) {
+        if (isRecord(item) && Array.isArray(item.loc) && item.loc.includes('selected')) {
+          if (isString(item.msg)) return item.msg.replace(/^Value error, /, '')
+        }
+      }
+    }
+    return REQUEST_MESSAGE
   } catch {
     return REQUEST_MESSAGE
   }
@@ -186,7 +225,7 @@ async function errorDetail(response: Response): Promise<string> {
 
 // Olayları sırayla işler; akışı bitiren olay (done ya da error) geldiyse true döner.
 // Biçimi bozuk ara olay atlanır; biçimi bozuk son olay akış hatası sayılır. Tablodaki
-// yedi tip dışındaki olay yok sayılır (docs/chat.md › Arayüz kuralları 1).
+// sekiz tip dışındaki olay yok sayılır (docs/chat.md › Arayüz kuralları 1).
 export function dispatch(event: SseEvent, handlers: ChatHandlers): boolean {
   const data = parseData(event.data)
   switch (event.event) {
@@ -201,6 +240,9 @@ export function dispatch(event: SseEvent, handlers: ChatHandlers): boolean {
       return false
     case 'selection_card':
       if (data !== null && isSelection(data)) handlers.onSelection(data)
+      return false
+    case 'map_command':
+      if (data !== null && isMapCommand(data)) handlers.onMapCommand(data)
       return false
     case 'text_delta':
       if (data !== null && isString(data.text)) handlers.onText(data.text)
@@ -232,13 +274,18 @@ export async function sendFeedback(auditId: string): Promise<boolean> {
   }
 }
 
-export async function streamChat(message: string, handlers: ChatHandlers): Promise<void> {
+export async function streamChat(
+  message: string,
+  handlers: ChatHandlers,
+  selected: SelectedObject | null = null,
+): Promise<void> {
   let response: Response
   try {
     response = await fetch('/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message }),
+      // Seçim yoksa selected alanı hiç gönderilmez (açık null 422 verir).
+      body: JSON.stringify(selected === null ? { message } : { message, selected }),
     })
   } catch {
     handlers.onError(NETWORK_MESSAGE)

@@ -272,7 +272,11 @@ Harita çizecek istemci için stand konumlarını verir. Kaynak `COPILOT_DATA`'d
 
 ## Ekran (`/canli`)
 
-Vite + React'te yeni rota `/canli` (`src/Live.tsx`, SSE istemcisi `src/live.ts`). Harita bu sürümde yoktur.
+Vite + React'te yeni rota `/canli` (`src/Live.tsx`, SSE istemcisi `src/live.ts`). `/canli` tablosunda harita yoktur.
+
+Harita `/sohbet` sayfasındadır (`src/Map.tsx`, veri `src/live.ts`): sohbetin sağında sabit genişlikte SVG panel, dar ekranda altına geçer. Stand'ler `GET /map/stands`'ten kare + `stand_code`, uçaklar `GET /live/positions`'tan üçgen (`Track` yoksa daire) + `Flight` olarak çizilir; ham alanlar `<title>`'dadır. Kurallar tablodakiyle aynıdır: yaş ve saat yazılmaz, tarayıcı saati okunmaz, konum kaydırılmaz; `stale: true` uçak soluk çizilir, `removed` gelen kalkar. Sınırlar ilk veriyle bir kez sabitlenir. Tıklama tek nesneyi seçer (boşa ya da aynı nesneye tıklayınca kalkar); seçim sonraki `/chat` mesajına `selected` olarak eklenir. `map_command` olayları (`docs/chat.md`) yalnızca ekran durumunu değiştirir.
+
+Haritada akış durumu: `status` `yayinda` değilken ya da canlı bağlantı kesikken (istemci 5 sn'de bir yeniden bağlanır) haritanın üstünde "Akış durdu (<durum>): <açıklama> · son saat HH:MM:SS" bandı çıkar; `bitti` = akış tamamlandı, `koptu` = yayıncı beklenmedik koptu, `broker_yok` = broker bağlantısı yok, bağlantı kesikse genel istemci mesajı. Saat SSE'deki son `clock.now`'ın `HH:MM:SS` kısmıdır; tarayıcı saati okunmaz. Akış durmuşken tüm uçaklar gri ve harita kenarlığı kırmızı çizilir (`stale`'den ayrı gösterge; yaş hesaplanmaz). `stale: true` uçak ayrıca soluk, kesik çizgili kenarlıklı ve etiketinde "bayat" ile gösterilir; yaş yazılmaz.
 
 - Tablo, `Flight`'a göre sıralı: `Flight`, `Callsign`, `Registration`, `Type`, `Origin → Destination`, `Latitude`/`Longitude`, `Track`, `Speed`, `Onground`, son güncelleme (`LastUpdate`, yerel `HH:MM:SS`), yaş, durum.
 - Durum rozeti: `stale` `false` ise "güncel", `true` ise "bayat — HH:MM itibarıyla". Bayat satır silinmez, soluk gösterilir.
@@ -311,7 +315,7 @@ Veri ekibiyle teyit edilecek; cevaplanınca Veri tabloları ve referans dosya g�
 
 ## Kapsam dışı
 
-- Harita ekranı, iz çizimi, filtre ve arama. (Haritanın veri ucu `GET /map/stands` vardır; ekranı yoktur.)
+- İz çizimi, filtre ve arama. (Harita `/sohbet`'te vardır; `/canli`'da yoktur.)
 - Tazelik eşikli ayrı canlı konum tool'u (`get_flight_position`). Canlı modda `get_flight_details` konumu depodan verir (Canlı mod ve tool'lar), ama bayatlığı zarfta işaretlemez.
 - Kimlik doğrulama, TLS, çoklu backend örneği, broker kümeleme.
 - Geçmiş konumları saklama ve yeniden oynatma (yayıncı `--from` ile baştan başlatılır).

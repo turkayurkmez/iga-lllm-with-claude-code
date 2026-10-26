@@ -10,12 +10,18 @@ import logging
 from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 from types import ModuleType
-from typing import Any
+from typing import Any, Literal
 
 import anthropic
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import Response, StreamingResponse
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    field_validator,
+    model_validator,
+)
 from starlette.concurrency import run_in_threadpool
 
 from backend import audit, instructions, live
@@ -23,6 +29,7 @@ from backend.agent import run_agent
 from backend.cards import CardBuilder
 from backend.tools import run_tool, tool_definitions
 from backend.tools._ortak import DataError, load_data
+from backend.tools.harita import ID_PATTERNS, exists
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -41,6 +48,10 @@ LIVE_UNAVAILABLE_MESSAGE = "Canlı konum akışı şu anda kullanılamıyor."
 STANDS_UNAVAILABLE_MESSAGE = (
     "Stand verisi şu anda okunamıyor. Lütfen daha sonra tekrar deneyin."
 )
+SELECTED_UNAVAILABLE_MESSAGE = (
+    "Seçili nesne şu anda doğrulanamıyor. Lütfen daha sonra tekrar deneyin."
+)
+SELECTED_NOT_FOUND_MESSAGE = "Seçili nesne haritada bulunamadı."
 # Olay yokken bağlantıyı canlı tutan yorumun aralığı (docs/canli_akis.md › SSE).
 LIVE_PING_INTERVAL_S = 15
 
@@ -85,8 +96,32 @@ def load_llm() -> ModuleType:
     return importlib.import_module("backend.llm")
 
 
+class Selected(BaseModel):
+    """Haritada seçili nesne (docs/harita.md › Haritadan sohbete bağlam)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    object_type: Literal["flight", "stand"]
+    id: str
+
+    @model_validator(mode="after")
+    def check_id_format(self) -> "Selected":
+        if not ID_PATTERNS[self.object_type].fullmatch(self.id):
+            raise ValueError(f"Kimlik {self.object_type} biçimine uymuyor.")
+        return self
+
+
 class ChatRequest(BaseModel):
     message: str
+    selected: Selected | None = None
+
+    @field_validator("selected", mode="before")
+    @classmethod
+    def reject_null_selected(cls, value: Any) -> Any:
+        # Alan yoksa varsayılan geçerlidir; açık null ise yanlış biçimdir.
+        if value is None:
+            raise ValueError("selected nesne olmalı; yoksa alan hiç gönderilmemeli.")
+        return value
 
     @field_validator("message")
     @classmethod
@@ -209,9 +244,13 @@ class ChatStream:
     istemci akışı kestiyse döngü (thread'de sürer) bittiğinde.
     """
 
-    def __init__(self, llm: ModuleType, message: str, version: str):
+    def __init__(
+        self, llm: ModuleType, message: str, version: str, prompt: str | None = None
+    ):
         self._llm = llm
+        # Audit orijinal mesajı, model not eklenmiş metni alır.
         self._message = message
+        self._prompt = message if prompt is None else prompt
         self._version = version
         self.audit_id = audit.new_id()
         self._chips: list[dict] = []
@@ -232,7 +271,7 @@ class ChatStream:
         def work() -> None:
             try:
                 self._outcome = run_chat(
-                    self._llm, self._message, self._version, emit, self.audit_id
+                    self._llm, self._prompt, self._version, emit, self.audit_id
                 )
             finally:
                 loop.call_soon_threadsafe(queue.put_nowait, None)
@@ -407,8 +446,42 @@ async def feedback(request: FeedbackRequest) -> Response:
     return Response(status_code=204)
 
 
+def selected_note(selected: Selected) -> str:
+    """Modele giden sabit biçimli tek satır (docs/harita.md › Haritadan sohbete bağlam)."""
+    return f"Haritada seçili: {selected.object_type} {selected.id}"
+
+
+async def check_selected(selected: Selected) -> None:
+    """Seçili nesne veride yoksa 422, veri okunamıyorsa 503; model çağrılmadan önce."""
+    try:
+        # exists veriyi diskten ve canlı depodan okur; olay döngüsünü bloklamasın.
+        found, _ = await run_in_threadpool(exists, selected.object_type, [selected.id])
+    except DataError:
+        logger.exception("Seçili nesne doğrulanamadı")
+        raise HTTPException(
+            status_code=503, detail=SELECTED_UNAVAILABLE_MESSAGE
+        ) from None
+    if not found:
+        # FastAPI doğrulama gövdesiyle aynı biçim (docs/chat.md › Uç).
+        raise HTTPException(
+            status_code=422,
+            detail=[
+                {
+                    "type": "value_error",
+                    "loc": ["body", "selected"],
+                    "msg": SELECTED_NOT_FOUND_MESSAGE,
+                }
+            ],
+        )
+
+
 @app.post("/chat")
 async def chat(request: ChatRequest) -> StreamingResponse:
+    # Doğrulama modelden ve ayar denetiminden önce: geçersiz istek hiçbir şeyi tetiklemez.
+    prompt = None
+    if request.selected is not None:
+        await check_selected(request.selected)
+        prompt = f"{selected_note(request.selected)}\n{request.message}"
     # ConfigError, backend.llm import edilemeden yakalanamaz; RuntimeError onun taban sınıfıdır.
     try:
         llm = load_llm()
@@ -425,4 +498,4 @@ async def chat(request: ChatRequest) -> StreamingResponse:
         raise HTTPException(status_code=503, detail=CONFIG_ERROR_MESSAGE) from None
 
     # text/event-stream için Starlette charset=utf-8'i başlığa kendisi ekler.
-    return ChatResponse(ChatStream(llm, request.message, version))
+    return ChatResponse(ChatStream(llm, request.message, version, prompt))

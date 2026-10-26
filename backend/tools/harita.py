@@ -76,8 +76,11 @@ def _visible_flights(hub: live.LiveHub, flight_nos: list[str]) -> set[str]:
     }
 
 
-def _exists(object_type: str, ids: list[str]) -> tuple[bool, str]:
-    """Kimliklerin hepsi haritada mı; (var_mı, source). Veri her çağrıda okunur."""
+def exists(object_type: str, ids: list[str]) -> tuple[bool, str]:
+    """Kimliklerin hepsi haritada mı; (var_mı, source). Veri her çağrıda okunur.
+
+    Tool'lar ve /chat'in `selected` denetimi aynı kuralı kullanır.
+    """
     if object_type == "stand":
         data, source = load_data(("stands",))
         return set(ids) <= _stand_codes(data), source
@@ -90,7 +93,7 @@ def _exists(object_type: str, ids: list[str]) -> tuple[bool, str]:
 
 
 def focus_map_object(object_type: str, id: str) -> dict:
-    found, source = _exists(object_type, [id])
+    found, source = exists(object_type, [id])
     if not found:
         return {"value": None, "source": source, "error": NOT_FOUND}
     value = {"command": "focus_map_object", "object_type": object_type, "id": id}
@@ -98,7 +101,7 @@ def focus_map_object(object_type: str, id: str) -> dict:
 
 
 def highlight_map_set(object_type: str, ids: list[str]) -> dict:
-    found, source = _exists(object_type, ids)
+    found, source = exists(object_type, ids)
     if not found:
         return {"value": None, "source": source, "error": NOT_FOUND}
     value = {"command": "highlight_map_set", "object_type": object_type, "ids": ids}
