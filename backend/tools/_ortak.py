@@ -7,7 +7,7 @@ durumunda DataError fırlatır, zarfı run_tool kurar.
 
 import json
 import os
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from pathlib import Path
 from typing import Any
 
@@ -18,7 +18,13 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 CONTRACTS_DIR = Path(__file__).resolve().parent / "contracts"
 DATA_VAR = "COPILOT_DATA"
 # tool_definitions sırası (docs/tools.md'deki sıra).
-TOOL_NAMES = ("get_flight_summary", "resolve_flight_identity", "get_flight_details")
+TOOL_NAMES = (
+    "get_flight_summary",
+    "resolve_flight_identity",
+    "get_flight_details",
+    "focus_map_object",
+    "highlight_map_set",
+)
 
 
 class DataError(RuntimeError):
@@ -33,11 +39,15 @@ def load_contract(name: str) -> dict:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-def args_model(input_schema: dict) -> type[BaseModel]:
+def args_model(
+    input_schema: dict, extra_check: Callable[[dict], str | None] | None = None
+) -> type[BaseModel]:
     """Argümanları kontratın input_schema'sıyla doğrulayan pydantic modeli kurar.
 
     call_tool pydantic model beklediği için şema ince bir modele sarılır; ayrı bir
-    pydantic şeması tutulmaz, tek doğruluk kaynağı kontrattır.
+    pydantic şeması tutulmaz, tek doğruluk kaynağı kontrattır. Şemanın anlatamadığı
+    kurallar (örn. kimlik biçiminin başka bir alana bağlı olması) için `extra_check`
+    verilir; şema geçtikten sonra çağrılır, hata mesajı döndürürse argüman reddedilir.
     """
     validator = Draft202012Validator(input_schema)
 
@@ -51,6 +61,10 @@ def args_model(input_schema: dict) -> type[BaseModel]:
             errors = sorted(validator.iter_errors(data), key=str)
             if errors:
                 raise ValueError("; ".join(error.message for error in errors))
+            if extra_check is not None:
+                message = extra_check(data)
+                if message:
+                    raise ValueError(message)
             return data
 
     return Args

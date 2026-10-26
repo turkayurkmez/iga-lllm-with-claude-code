@@ -1,0 +1,64 @@
+{
+  "name": "highlight_map_set",
+  "version": "1.0.0",
+  "description": "Haritada aynı tipten bir nesne kümesini (uçuşlar ya da stand'ler) vurgular; önceki vurguyu değiştirir. Döndürdüğü şey bir harita komutudur (command, object_type, ids); operasyonel veri değildir ve girişin doğrulanmış kopyasıdır, ids sırası girişteki gibidir. Kümede 1 ile 50 arasında kimlik olmalı ve tekrar olmamalıdır. Kimliklerden biri haritada yoksa (uçuşun görünür canlı konumu yok, stand listede yok) tüm komut NOT_FOUND ile reddedilir ve harita değişmez; geri kalan kimlikler vurgulanmaz.\n\nNe zaman kullanılır: kullanıcı birden fazla uçağı ya da stand'i haritada birlikte göstermek istediğinde ve kimlikler elindeyse. Uçuş kimlikleri flight_no'dur (resolve_flight_identity'den). Örnek: \"C101 ve C102'yi göster\" → {\"object_type\": \"stand\", \"ids\": [\"C101\", \"C102\"]}; \"TK2344 ile TK2345'i vurgula\" → {\"object_type\": \"flight\", \"ids\": [\"TK2344\", \"TK2345\"]}.\n\nNe zaman KULLANILMAZ: tek nesne için (focus_map_object kullan); uçuş ve stand'i aynı çağrıda karıştırmak için (iki ayrı çağrı gerekir, ikincisi birincinin vurgusunu değiştirir); \"gecikmesi 15 dakikadan fazla olanlar\" gibi kriterle küme tanımlamak için (bu tool kriter çözmez, kimlik listesi ister; kümeyi kendin tahmin etme); bilgi sorularında (get_flight_details kullan); vurguyu kaldırma, yakınlaştırma, iz çizme ya da filtreleme isteklerinde (bu tool yapmaz). NOT_FOUND döndüğünde kümenin vurgulanmadığını söyle.",
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "object_type": {
+        "type": "string",
+        "enum": ["flight", "stand"],
+        "description": "Kümenin nesne tipi: flight (canlı konumdaki uçaklar) ya da stand (park yerleri). Tüm kimlikler bu tipten olmalıdır.",
+        "examples": ["stand"]
+      },
+      "ids": {
+        "type": "array",
+        "items": {
+          "type": "string",
+          "pattern": "^([A-Z]{2}\\d{3,4}|[A-Z]\\d{3})$"
+        },
+        "description": "Vurgulanacak kimlikler; 1-50 eleman, tekrarsız. object_type flight ise sefer numaraları (iki büyük harf ve 3-4 rakam, ör. \"TK2345\"); stand ise stand kodları (büyük harf ve 3 rakam, ör. \"C101\"). Biçim object_type'a göre denetlenir. Uçuş için callsign (\"THY2345\") ya da tescil verme.",
+        "examples": [["C101", "C102"], ["TK2344", "TK2345"]]
+      }
+    },
+    "required": ["object_type", "ids"],
+    "additionalProperties": false
+  },
+  "value_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "anyOf": [
+      {
+        "type": "null",
+        "description": "Kümedeki bir nesne haritada yok (NOT_FOUND)."
+      },
+      {
+        "type": "object",
+        "properties": {
+          "command": {
+            "type": "string",
+            "enum": ["highlight_map_set"],
+            "description": "Harita komutunun adı.",
+            "examples": ["highlight_map_set"]
+          },
+          "object_type": {
+            "type": "string",
+            "enum": ["flight", "stand"],
+            "description": "Girişteki nesne tipi.",
+            "examples": ["stand"]
+          },
+          "ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^([A-Z]{2}\\d{3,4}|[A-Z]\\d{3})$"
+            },
+            "description": "Girişteki kimlikler, girişteki sırayla.",
+            "examples": [["C101", "C102"]]
+          }
+        },
+        "required": ["command", "object_type", "ids"],
+        "additionalProperties": false
+      }
+    ]
+  }
+}

@@ -8,6 +8,7 @@ import importlib
 import json
 import logging
 from collections.abc import AsyncIterator, Callable
+from contextlib import asynccontextmanager
 from types import ModuleType
 from typing import Any
 
@@ -17,10 +18,11 @@ from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from starlette.concurrency import run_in_threadpool
 
-from backend import audit, instructions
+from backend import audit, instructions, live
 from backend.agent import run_agent
 from backend.cards import CardBuilder
 from backend.tools import run_tool, tool_definitions
+from backend.tools._ortak import DataError, load_data
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -35,6 +37,12 @@ FEEDBACK_ERROR_MESSAGE = (
 )
 INVALID_JSON_MESSAGE = "İstek gövdesi geçerli JSON değil."
 UNEXPECTED_MESSAGE = "Beklenmeyen bir hata oluştu."
+LIVE_UNAVAILABLE_MESSAGE = "Canlı konum akışı şu anda kullanılamıyor."
+STANDS_UNAVAILABLE_MESSAGE = (
+    "Stand verisi şu anda okunamıyor. Lütfen daha sonra tekrar deneyin."
+)
+# Olay yokken bağlantıyı canlı tutan yorumun aralığı (docs/canli_akis.md › SSE).
+LIVE_PING_INTERVAL_S = 15
 
 # Zarfın error.code'u → HTTP durum kodu (docs/http.md › Durum kodu eşlemesi).
 # Tablo kapalıdır: listede olmayan kod 500 olur.
@@ -47,7 +55,25 @@ STATUS_BY_CODE = {
     "SCHEMA_VALIDATION_FAILED": 422,
 }
 
-app = FastAPI(title="AOCC Copilot")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    """COPILOT_MQTT_URL doluysa canlı konum tüketicisini sunucuyla birlikte çalıştırır."""
+    started = live.start()
+    app.state.live = started[0] if started is not None else None
+    if started is not None:
+        # Canlı mod: tool'ların saati ve get_flight_details konumu depodan.
+        live.activate(started[0])
+    try:
+        yield
+    finally:
+        app.state.live = None
+        if started is not None:
+            live.deactivate()
+            started[1].stop()
+
+
+app = FastAPI(title="AOCC Copilot", lifespan=lifespan)
 
 
 def load_llm() -> ModuleType:
@@ -280,6 +306,65 @@ def json_response(content: object, status_code: int) -> Response:
         media_type="application/json; charset=utf-8",
         headers={"Cache-Control": "no-store"},
     )
+
+
+class LiveResponse(StreamingResponse):
+    """GET /live/positions akışı: snapshot, depo olayları ve olay yokken ping.
+
+    Abonelik yanıt düzeyinde bırakılır: ASGI 2.4'te istemci gidince üreteç
+    kapatılmaz (bkz. ChatResponse).
+    """
+
+    def __init__(self, hub: live.LiveHub):
+        self._hub = hub
+        snapshot, self._queue = hub.subscribe()
+        super().__init__(
+            self._events(snapshot),
+            media_type="text/event-stream",
+            headers={"Cache-Control": "no-cache"},
+        )
+
+    async def _events(self, snapshot: dict) -> AsyncIterator[str]:
+        yield sse_event("snapshot", snapshot)
+        while True:
+            try:
+                name, data = await asyncio.wait_for(
+                    self._queue.get(), LIVE_PING_INTERVAL_S
+                )
+            except TimeoutError:
+                yield ": ping\n\n"
+                continue
+            yield sse_event(name, data)
+
+    async def __call__(self, scope: Any, receive: Any, send: Any) -> None:
+        try:
+            await super().__call__(scope, receive, send)
+        finally:
+            self._hub.unsubscribe(self._queue)
+
+
+@app.get("/live/positions")
+async def live_positions() -> Response:
+    hub = getattr(app.state, "live", None)
+    if hub is None:
+        return json_response({"detail": LIVE_UNAVAILABLE_MESSAGE}, 503)
+    return LiveResponse(hub)
+
+
+@app.get("/map/stands")
+def map_stands() -> Response:
+    """COPILOT_DATA › stands, kayıtlar aynen ve stand_code sıralı (docs/canli_akis.md)."""
+    # Senkron: FastAPI dosya okumasını thread havuzunda çalıştırır.
+    try:
+        data, _ = load_data(["stands"])
+        stands = data["stands"]
+        if not isinstance(stands, list) or not all(isinstance(s, dict) for s in stands):
+            raise DataError("stands bir nesne listesi değil.")
+    except DataError:
+        logger.exception("Stand verisi okunamadı.")
+        return json_response({"detail": STANDS_UNAVAILABLE_MESSAGE}, 503)
+    ordered = sorted(stands, key=lambda stand: str(stand.get("stand_code", "")))
+    return json_response({"stands": ordered}, 200)
 
 
 @app.get("/tools")

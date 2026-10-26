@@ -123,13 +123,15 @@ def test_tools_listesi_tool_definitions_ile_birebir_ayni(client):
     assert response.json() == tool_definitions()
 
 
-def test_tools_listesi_sozlesmedeki_sirayla_uc_tool(client):
+def test_tools_listesi_sozlesmedeki_sirayla_bes_tool(client):
     names = [tool["name"] for tool in client.get("/tools").json()]
 
     assert names == [
         "get_flight_summary",
         "resolve_flight_identity",
         "get_flight_details",
+        "focus_map_object",
+        "highlight_map_set",
     ]
 
 

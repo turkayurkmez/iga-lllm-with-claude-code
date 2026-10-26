@@ -4,9 +4,13 @@ Sistem saati backend/ altında yalnızca burada okunur. COPILOT_NOW doluysa now(
 çağrıda bu sabit anı döner; böylece simülasyon ve testler belirlenimci kalır. Değer
 her çağrıda ortamdan yeniden okunur. .env, llm.py'deki gibi ortamdaki değerleri
 ezmeden yüklenir.
+
+operational_now() tool'ların ve zarfın saatidir: canlı modda simüle an, değilse now()
+(docs/tools.md › Operasyonel saat). Audit now()'u kullanır, gerçek saatte kalır.
 """
 
 import os
+from collections.abc import Callable
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -17,6 +21,10 @@ ENV_VAR = "COPILOT_NOW"
 TZ = timezone(timedelta(hours=3))
 
 load_dotenv(ENV_FILE)
+
+# Canlı modda simüle anı veren kaynak; backend.live.activate kaydeder. clock live'ı
+# import etmez, bağımlılık tek yönlü kalır.
+_simulated: Callable[[], datetime | None] | None = None
 
 
 class ClockError(RuntimeError):
@@ -40,3 +48,18 @@ def now() -> datetime:
             f"{ENV_VAR} saat dilimi içermeli: {raw!r}. Örnek: 2026-10-20T16:22:00+03:00"
         )
     return fixed.astimezone(TZ)
+
+
+def set_simulated_source(source: Callable[[], datetime | None] | None) -> None:
+    global _simulated
+    _simulated = source
+
+
+def operational_now() -> datetime:
+    """Canlı modda ve saat mesajı alınmışsa simüle an; değilse now()."""
+    source = _simulated
+    if source is not None:
+        simulated = source()
+        if simulated is not None:
+            return simulated.astimezone(TZ)
+    return now()

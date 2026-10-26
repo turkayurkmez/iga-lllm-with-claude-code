@@ -1,0 +1,58 @@
+{
+  "name": "focus_map_object",
+  "version": "1.0.0",
+  "description": "Haritayı tek bir nesneye (uçuş ya da stand) odaklar ve o nesneyi seçili yapar. Döndürdüğü şey bir harita komutudur (command, object_type, id); operasyonel veri değildir ve girişin doğrulanmış kopyasıdır. Nesne haritada yoksa NOT_FOUND döner ve harita değişmez: uçuşun haritada görünür canlı konumu yoksa (iz başlamamış, iptal, canlı konum akışı kapalı) ya da stand kodu stand listesinde yoksa.\n\nNe zaman kullanılır: kullanıcı belirli bir uçağı ya da stand'i haritada görmek, haritada göstermek ya da haritayı oraya götürmek istediğinde. Uçuş için id, resolve_flight_identity'nin döndürdüğü flight_no'dur. Örnek: \"TK2345'i haritada göster\" → {\"object_type\": \"flight\", \"id\": \"TK2345\"}; \"C101 standını göster\" → {\"object_type\": \"stand\", \"id\": \"C101\"}.\n\nNe zaman KULLANILMAZ: birden fazla nesneyi birlikte göstermek için (highlight_map_set kullan); uçağın konumu, stand'i, gecikmesi gibi bilgi istendiğinde (get_flight_details kullan; bu tool bilgi döndürmez); callsign (THY2345) ya da tescil (TC-LSD) ile (önce resolve_flight_identity ile flight_no bul); vurguyu kaldırma, yakınlaştırma, iz çizme ya da filtreleme isteklerinde (bu tool yapmaz). NOT_FOUND döndüğünde nesnenin haritada olmadığını söyle; başka bir nesneyi kendin seçme.",
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "object_type": {
+        "type": "string",
+        "enum": ["flight", "stand"],
+        "description": "Nesne tipi: flight (canlı konumdaki uçak) ya da stand (park yeri).",
+        "examples": ["flight"]
+      },
+      "id": {
+        "type": "string",
+        "pattern": "^([A-Z]{2}\\d{3,4}|[A-Z]\\d{3})$",
+        "description": "object_type flight ise sefer numarası (flight_no: iki büyük harf ve 3-4 rakam, ör. \"TK2345\"); stand ise stand kodu (büyük harf ve 3 rakam, ör. \"C101\"). Biçim object_type'a göre denetlenir. Uçuş için callsign (\"THY2345\") ya da tescil verme.",
+        "examples": ["TK2345", "C101"]
+      }
+    },
+    "required": ["object_type", "id"],
+    "additionalProperties": false
+  },
+  "value_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "anyOf": [
+      {
+        "type": "null",
+        "description": "Nesne haritada yok (NOT_FOUND)."
+      },
+      {
+        "type": "object",
+        "properties": {
+          "command": {
+            "type": "string",
+            "enum": ["focus_map_object"],
+            "description": "Harita komutunun adı.",
+            "examples": ["focus_map_object"]
+          },
+          "object_type": {
+            "type": "string",
+            "enum": ["flight", "stand"],
+            "description": "Girişteki nesne tipi.",
+            "examples": ["flight"]
+          },
+          "id": {
+            "type": "string",
+            "pattern": "^([A-Z]{2}\\d{3,4}|[A-Z]\\d{3})$",
+            "description": "Girişteki kimlik, olduğu gibi.",
+            "examples": ["TK2345"]
+          }
+        },
+        "required": ["command", "object_type", "id"],
+        "additionalProperties": false
+      }
+    ]
+  }
+}

@@ -145,7 +145,7 @@ Tüm gövdeler UTF-8 JSON nesnesidir (`ensure_ascii=False`, tek satır). Ek sarm
 ## Yayıncı (`stream/publisher.py`)
 
 ```
-python -m stream.publisher --in data/referans/seed42-2026-10-20-radar.json --from HH:MM [--speed 60] [--no-wait] [--broker mqtt://127.0.0.1:1883] [--root aocc/sim/v1]
+python -m stream.publisher --in data/referans/seed42-2026-10-20-radar.json --from HH:MM [--speed 60 | --interval 2] [--no-wait] [--broker mqtt://127.0.0.1:1883] [--root aocc/sim/v1]
 ```
 
 | Argüman | Zorunlu | Açıklama |
@@ -153,13 +153,14 @@ python -m stream.publisher --in data/referans/seed42-2026-10-20-radar.json --fro
 | `--in` | evet | Radar biçimli referans dosya (Veri › Kaynak dosya). Yalnızca okunur. |
 | `--from` | evet | Simüle saatin başlangıcı, `HH:MM`. Gün `meta.date`'ten, saat dilimi `+03:00`. |
 | `--speed` | hayır | Gerçek 1 sn'de geçen simüle saniye, varsayılan `60`, `0`'dan büyük. |
+| `--interval` | hayır | İki 30 sn'lik adım arasındaki gerçek saniye, `0`'dan büyük; `--speed 30/N`'e denktir (`2` → `15`) ve `clock.speed`'e türetilen değer yazılır. `--speed` ile birlikte verilemez. |
 | `--no-wait` | hayır | Beklemeden yayınlar (test ve hızlı doldurma için). Sıra ve içerik değişmez. |
 | `--broker` | hayır | `mqtt://host:port`; varsayılan ortamdaki `COPILOT_MQTT_URL`, o da boşsa `mqtt://127.0.0.1:1883`. |
 | `--root` | hayır | Topic kökü, varsayılan `aocc/sim/v1`. |
 
 Akış:
 
-1. Girdi doğrulanır (dosya okunuyor, `meta.date` geçerli, `--from` ve `--speed` geçerli, her konumun `Key` ve `LastUpdate`'i var). Hata varsa broker'a bağlanılmaz: stderr'e `Hata: …`, çıkış 1, hiçbir mesaj yayınlanmaz (`synth` CLI kuralı).
+1. Girdi doğrulanır (dosya okunuyor, `meta.date` geçerli, `--from` ve `--speed`/`--interval` geçerli, her konumun `Key` ve `LastUpdate`'i var). Hata varsa broker'a bağlanılmaz: stderr'e `Hata: …`, çıkış 1, hiçbir mesaj yayınlanmaz (`synth` CLI kuralı).
 2. Broker'a bağlanılır; LWT `status` = `{"state": "koptu"}` (QoS 1, retained). Bağlanamazsa `Hata:` ve 1.
 3. Girdideki **tüm** `Key`'lerin `positions/<Key>` topic'lerine boş retained mesaj yazılır: aynı veriyle yeniden başlatmada önceki koşunun konumları kalmaz.
 4. `status` = `yayinda`; ardından her uçuş kaydı `flights/<_id>`'ye.
@@ -167,21 +168,55 @@ Akış:
 6. Bekleme `synth.stream` ile aynıdır (`docs/bozulma.md` › Akış › Belirlenimcilik ve bekleme): adım *i*'nin yayın anı başlangıç + (adım_i − from) / speed gerçek saniyedir, kayma birikmez; `--no-wait`'te hiç beklenmez.
 7. Son konum yayınlandıktan sonra son `clock`, ardından `status` = `bitti` yazılır, bağlantı temiz kapatılır (LWT tetiklenmez). stderr'e tek satır özet: yayınlanan konum sayısı, ilk ve son simüle saat. Ctrl+C'de de `bitti` yazılır.
 
-- Yayınlanan mesajların içeriği ve sırası yalnızca `--in` ve `--from`'dan türer; `--speed`, `--no-wait` ve sistem saati yalnızca **ne zaman** yayınlandığını etkiler.
+- Yayınlanan mesajların içeriği ve sırası yalnızca `--in` ve `--from`'dan türer; `--speed`/`--interval`, `--no-wait` ve sistem saati yalnızca **ne zaman** yayınlandığını etkiler (tek istisna `clock.speed` alanıdır).
+- **stdout:** her `positions/<Key>` (boş gövdeli temizlik hariç) ve `clock` mesajı broker'a yayınlandıktan sonra stdout'a tek satır `<topic> <gövde>` olarak yazılır (`mosquitto_sub -v` biçimi, UTF-8, `ensure_ascii=False`). Durum ve uçuş mesajları basılmaz. Özet ve hatalar stderr'dedir; hatada stdout boştur.
 - Yayıncı kayıtları düzeltmez, süzmez, ara değerleme yapmaz; girdide ne varsa onu yayınlar.
 
 ## Tüketici (`stream/consumer.py` + backend)
 
 Tüketici backend sürecinde çalışan tek bir MQTT abonesidir; tarayıcı başına ayrı abonelik açılmaz. `<kök>/#`'e abone olur; adresi `COPILOT_MQTT_URL`'den, kökü `COPILOT_MQTT_ROOT`'tan (boşsa `aocc/sim/v1`) okur. Backend konteynerde çalışırken değer `mqtt://host.docker.internal:1883`'tür (Broker › Erişim).
 
+**Başlatma (`backend/live.py`, `backend/main.py` › lifespan).**
+
+- Değerler sunucu açılışında bir kez okunur: önce süreç ortamı, boşsa `.env` (ortama yazılmadan). `.env.example`'da iki değer de vardır.
+- `COPILOT_MQTT_URL` boşsa tüketici başlamaz ve backend'de başka hiçbir şey değişmez; `GET /live/positions` `503` döner.
+- Değer `mqtt://host[:port]` biçiminde değilse sunucu yine açılır; hata sunucu loguna yazılır ve tüketici başlamaz.
+- Değer geçerliyse `LiveHub` (depo + SSE abone kuyrukları) ve paho abonesi başlar, sunucu kapanınca durur.
+- paho ayarları:
+  - Bağlantı `connect_async` + `loop_start` ile kurulur; broker o an yoksa açılış beklemez.
+  - Yeniden bağlanma `reconnect_delay_set(1, 30)` ile yapılır.
+  - Her bağlanışta `<kök>/#`'e QoS 1 ile abone olunur. Kopuşta `broker_lost()` çağrılır.
+- paho mesajları kendi thread'inde gelir. `LiveHub` depoyu kilitle sarar ve olayları abonelerin asyncio kuyruklarına event loop üzerinden verir. Yeni abone `snapshot`'ı ve kuyruğunu aynı kilit altında alır; arada olay kaçmaz.
+
 Durum (bellekte, süreç başına bir tane):
 
 | Parça | İçerik |
 |---|---|
-| `positions` | `Key` → son konum kaydı. Yeni mesajın `LastUpdate`'i eldekinden küçükse atılır (sıra dışı ya da yinelenen mesaj). |
+| `positions` | `Key` → son konum kaydı. Yeni mesajın `LastUpdate`'i eldekinden küçükse atılır (sıra dışı ya da yinelenen mesaj), eşitse yerine geçer. |
 | `flights` | `_id` → uçuş kaydı. |
 | `clock` | Son saat mesajı. Yoksa bayatlık hesaplanmaz. |
-| `status` | Son durum mesajı; broker'a bağlantı yoksa `broker_yok`. |
+| `status` | Son durum mesajı; broker'a bağlantı yoksa (başlangıç dahil) `broker_yok`. |
+
+### Depo (`stream/consumer.py` › `PositionStore`)
+
+Durumu tutan saf sınıftır: ağa bağlanmaz, sistem saatini okumaz. MQTT aboneliği gelen her mesajı `apply(topic, payload) -> [olay]`'a verir; dönen olaylar SSE tablosundaki adları taşır (`position`, `stale`, `removed`, `clock`, `status`). `snapshot()` SSE'nin `snapshot` verisini, `broker_lost()` bağlantı kopuşunu (`status` → `broker_yok`, konumlar korunur) işler. Aynı durum yeniden gelirse `status` olayı çıkmaz.
+
+**Mesaj doğrulama.** Geçersiz mesaj sessizce atılır: durum değişmez, olay çıkmaz, istisna fırlatılmaz.
+
+| Topic | Geçerli gövde |
+|---|---|
+| `positions/<Key>` | Boş (silme) ya da UTF-8 JSON nesnesi; `Key` metin ve topic'teki `<Key>`'e eşit, `LastUpdate` tamsayı. |
+| `flights/<_id>` | Boş (silme) ya da JSON nesnesi; `_id` topic'teki `<_id>`'ye eşit. |
+| `clock` | JSON nesnesi; `now` metin, `epoch` tamsayı, `speed` sayı. |
+| `status` | JSON nesnesi; `state` ∈ {`yayinda`, `bitti`, `koptu`}. |
+
+Kökün dışındaki ve tabloda olmayan topic'ler atılır.
+
+**Saat çapası.** Tüketicinin "şimdi"si yalnızca son `clock.epoch`'tur. `epoch`'u eldekinden küçük saat mesajı atılır (saat geri gitmez). Saat mesajı durumdan bağımsız işlenir; yayıncı durunca saat mesajı gelmediği için saat zaten ilerlemez. Saat ilerleyince önce `clock` olayı, sonra yeni görünür olan (`position`) ve bayata geçen (`stale`) konumlar `(Flight, Key)` sırasıyla çıkar.
+
+**Görünen nesneler.** Saat yoksa ya da `LastUpdate` ≤ `clock.epoch` ise konum görünürdür; yalnızca görünür konum için `position` olayı çıkar ve `snapshot`'a girer. Daha önce görünmüş bir konum boş gövdeyle silinirse `removed` çıkar; hiç görünmemişse olay çıkmaz.
+
+**Final kuralı (izi biten uçuş).** `Onground` `true` olan konum finaldir: uçak yerdedir, yeni konum gelmemesi beklenir. Final konum bayat sayılmaz ve `stale` olayı üretmez; görünümde `final: true` yazar. Final, uçuşun değil o anki konumun özelliğidir: kalkışta taksi konumu da finaldir, havadaki ilk konum gelince düşer.
 
 - **Gelecek konum gösterilmez.** `LastUpdate` > `clock.epoch` olan konum saklanır ama SSE'ye verilmez; saat ona ulaşınca verilir (`docs/tools.md` › `get_flight_details` › `ts ≤ now` kuralı).
 - Tüketici konumu düzeltmez, tahmin etmez, ara değerleme yapmaz; uçuş kaydından konum türetmez.
@@ -193,7 +228,7 @@ Durum (bellekte, süreç başına bir tane):
 Kural `docs/zarf.md` ile aynıdır; konum için eşik **5 dakikadır** (`docs/zarf.md` › Örnekler › `get_flight_position`).
 
 - Yaş = `clock.epoch` − `LastUpdate` (saniye).
-- Yaş **300 sn'yi aşarsa** konum bayattır (`stale: true`). Eşiğe eşit yaş bayat sayılmaz.
+- Yaş **300 sn'yi aşarsa** konum bayattır (`stale: true`). Eşiğe eşit yaş bayat sayılmaz. Final konum (Tüketici › Final kuralı) yaşından bağımsız olarak bayat sayılmaz.
 - Bayatlığı tüketici hesaplar; yayıncı ve ekran hesaplamaz. Ekran yalnızca SSE'deki `stale`'i gösterir.
 - Bayat konum silinmez ve güncelmiş gibi sunulmaz: son değer `LastUpdate` zaman damgasıyla verilir ve eski olduğu açıkça işaretlenir. Ara değerleme, tahmin ya da başka kayıttan (block zamanı, rota) konum üretilmez.
 - `status` `yayinda` değilken (`bitti`, `koptu`, `broker_yok`) saat ilerlemez; bayatlık son saatle donar ve ekran akışın durduğunu ayrıca gösterir.
@@ -201,7 +236,7 @@ Kural `docs/zarf.md` ile aynıdır; konum için eşik **5 dakikadır** (`docs/za
 
 ## SSE: `GET /live/positions`
 
-Yanıt `text/event-stream; charset=utf-8`; her olayın `data`'sı tek satır JSON (`ensure_ascii=False`). Biçim `/chat` akışıyla aynı kurallara uyar (`docs/chat.md`). Vite proxy listesine `/live` eklenir (CLAUDE.md › frontend).
+Yanıt `text/event-stream; charset=utf-8`; her olayın `data`'sı tek satır JSON (`ensure_ascii=False`). Biçim `/chat` akışıyla aynı kurallara uyar (`docs/chat.md`). Vite proxy listesine `/live` eklenir (CLAUDE.md › frontend). Tüketici başlamamışsa (Tüketici › Başlatma) yanıt `503`, gövde `{"detail": "<genel Türkçe mesaj>"}`'dir; akış açılmaz.
 
 | Olay | Ne zaman | `data` |
 |---|---|---|
@@ -212,11 +247,28 @@ Yanıt `text/event-stream; charset=utf-8`; her olayın `data`'sı tek satır JSO
 | `clock` | Her saat mesajında. | Saat mesajı. |
 | `status` | Durum değiştiğinde. | `{"state"}` |
 
-Görünüm = konum kaydının alanları olduğu gibi + `as_of` (`clock.now`), `age_s` (tamsayı) ve `stale` (mantıksal). Saat yoksa `as_of`, `age_s` ve `stale` yazılmaz.
+Görünüm = konum kaydının alanları olduğu gibi + `as_of` (`clock.now`), `age_s` (tamsayı), `stale` (mantıksal) ve `final` (mantıksal, `Onground` `true` ise `true`). Saat yoksa `as_of`, `age_s` ve `stale` yazılmaz; `final` her zaman yazılır.
 
 - 15 gerçek saniyede bir `: ping` yorumu gönderilir (bağlantı canlı tutma).
 - İstemci koparsa sunucu o istemcinin kuyruğunu bırakır; tüketici durumu etkilenmez. Yeniden bağlanan istemci yine `snapshot` ile başlar; `Last-Event-ID` desteklenmez.
 - Hata ayrıntısı (broker adresi, exception) olaylara yazılmaz; yalnızca `status` `broker_yok`.
+
+## Canlı mod ve tool'lar
+
+Canlı mod, tüketicinin lifespan'da başladığı durumdur (`COPILOT_MQTT_URL` dolu ve geçerli). Lifespan `backend.live.activate(hub)` ile modu açar, kapanışta `deactivate()` ile kapatır. Broker bağlantısının kopması modu kapatmaz; son saat ve son konumlar kullanılır.
+
+- **Operasyonel saat:** `backend.clock.operational_now()` canlı modda ve saat mesajı alınmışsa simüle andır, değilse `now()` (`docs/tools.md` › Operasyonel saat). Zarfın `as_of`'u ve `get_flight_details`'in konum seçimi bunu kullanır. Audit kayıtları gerçek saatte (`now()`) kalır.
+- **`get_flight_details` konumu:** canlı depodan gelir (`docs/tools.md` › `get_flight_details` › Canlı mod).
+- Canlı mod kapalıyken her şey öncekiyle aynıdır.
+
+## Stand listesi: `GET /map/stands`
+
+Harita çizecek istemci için stand konumlarını verir. Kaynak `COPILOT_DATA`'daki gün verisinin `stands` dizisidir (`docs/spec.md` §6). Veri her istekte okunur, tool'larla aynı yoldan (`backend/tools/_ortak.load_data`). Koordinatlar üretecin kurgusal ızgarasıdır, gerçek stand geometrisi değildir (`synth/generator.py`). Tüketiciye ve broker'a bağlı değildir; `COPILOT_MQTT_URL` boşken de çalışır.
+
+- `200`, `application/json; charset=utf-8`, `Cache-Control: no-store`. Gövde `{"stands": [...]}`.
+- Kayıtlar kaynaktaki gibidir: `stand_code`, `stand_type`, `max_code_letter`, `mars`, `status`, `lat`, `lon`. Alan eklenmez, çıkarılmaz, değiştirilmez. Sıra `stand_code`'a göredir.
+- Veri okunamazsa ya da `stands` bir nesne listesi değilse `503`, gövde `{"detail": "<genel Türkçe mesaj>"}`'dir; ayrıntı yalnızca sunucu loguna yazılır.
+- Vite proxy listesine `/map` eklenir.
 
 ## Ekran (`/canli`)
 
@@ -241,7 +293,7 @@ Vite + React'te yeni rota `/canli` (`src/Live.tsx`, SSE istemcisi `src/live.ts`)
 
 ## Kurallar
 
-- Mesaj gövdesi kaynak kaydın kendisidir; hattın hiçbir aşaması alan eklemez, değiştirmez, türetmez. Tek istisna SSE görünümündeki `as_of`, `age_s`, `stale`'dir ve bunları yalnızca tüketici hesaplar.
+- Mesaj gövdesi kaynak kaydın kendisidir; hattın hiçbir aşaması alan eklemez, değiştirmez, türetmez. Tek istisna SSE görünümündeki `as_of`, `age_s`, `stale`, `final`'dir ve bunları yalnızca tüketici hesaplar.
 - Bayatlık eşiği tek yerde tanımlıdır (`stream/messages.py`); ekranda ya da yayıncıda tekrar yazılmaz.
 - Yayıncı ve tüketici dosyaya yazmaz; broker kalıcılığı kapalıdır.
 - Gerçek kaynağa geçişte yalnızca yayıncı değişir; kök `aocc/live/v1` olur, mesaj biçimi aynı kalır.
@@ -259,7 +311,7 @@ Veri ekibiyle teyit edilecek; cevaplanınca Veri tabloları ve referans dosya g�
 
 ## Kapsam dışı
 
-- Harita, iz çizimi, filtre ve arama.
-- Agent'ın canlı konum tool'u (`get_flight_position`). Tool tanımlandığında bu hattın tüketici durumunu kaynak olarak kullanabilir; sözleşmesi ayrı yazılır.
+- Harita ekranı, iz çizimi, filtre ve arama. (Haritanın veri ucu `GET /map/stands` vardır; ekranı yoktur.)
+- Tazelik eşikli ayrı canlı konum tool'u (`get_flight_position`). Canlı modda `get_flight_details` konumu depodan verir (Canlı mod ve tool'lar), ama bayatlığı zarfta işaretlemez.
 - Kimlik doğrulama, TLS, çoklu backend örneği, broker kümeleme.
 - Geçmiş konumları saklama ve yeniden oynatma (yayıncı `--from` ile baştan başlatılır).

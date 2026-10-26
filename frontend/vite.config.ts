@@ -19,6 +19,8 @@ export default defineConfig(({ mode }) => {
         '/chat': backend,
         '/feedback': backend,
         '/health': backend,
+        '/live': backend,
+        '/map': backend,
         '/tools': backend,
       },
     },
