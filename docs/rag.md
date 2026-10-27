@@ -65,4 +65,4 @@ Bu uç zarf değildir; M5.3'te tool olurken zarfa girer.
 
 ## Kapsam dışı (bu modülde)
 
-Anahtar kelime ve hibrit arama, reranker, kaynak önceliği (M5.2); modele parça göndermek, citation, "bilmiyorum", sürüm ve çelişki yönetimi (M5.3); operasyonel hafıza, emsal arama, RAG ölçümü (M5.4); injection savunması (Gün 6); vektör veritabanı.
+Anahtar kelime ve hibrit arama, reranker, kaynak önceliği (M5.2; sözleşme `docs/hibrit.md`); modele parça göndermek, citation, "bilmiyorum", sürüm ve çelişki yönetimi (M5.3); operasyonel hafıza, emsal arama, RAG ölçümü (M5.4); injection savunması (Gün 6); vektör veritabanı.
