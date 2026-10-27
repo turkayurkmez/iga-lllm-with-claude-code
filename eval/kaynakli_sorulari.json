@@ -1,0 +1,12 @@
+[
+  {"id": "S1", "soru": "Kategori E uçağı için stand tahsisinde hangi kural uygulanır?", "cevaplanabilir": true, "beklenen_belgeler": ["D01"], "include_superseded": false},
+  {"id": "S2", "soru": "Düşük görüşte yeni prosedürde ne değişti?", "cevaplanabilir": true, "beklenen_belgeler": ["D02", "D03"], "include_superseded": true},
+  {"id": "S3", "soru": "A grubu stand'ına kod E uçağı park edebilir mi?", "cevaplanabilir": true, "beklenen_belgeler": ["D01", "D07"], "include_superseded": false},
+  {"id": "S4", "soru": "Düşük görüş operasyonu hangi pist görüş mesafesinde başlatılır?", "cevaplanabilir": true, "beklenen_belgeler": ["D03"], "include_superseded": false},
+  {"id": "S5", "soru": "What is the procedure when a passenger boarding bridge fails?", "cevaplanabilir": true, "beklenen_belgeler": ["D05"], "include_superseded": false},
+  {"id": "S6", "soru": "Yer hizmetleri SLA ekinde hizmet seviyeleri nasıl tanımlanıyor?", "cevaplanabilir": true, "beklenen_belgeler": ["D11", "D12"], "include_superseded": false},
+  {"id": "S7", "soru": "Tip II sıvı için holdover süresi nedir?", "cevaplanabilir": true, "beklenen_belgeler": ["D04"], "include_superseded": false},
+  {"id": "U1", "soru": "Tayfun uyarısında hangi prosedür uygulanır?", "cevaplanabilir": false, "beklenen_belgeler": [], "include_superseded": false},
+  {"id": "U2", "soru": "Yemekhanenin bu haftaki menüsü nedir?", "cevaplanabilir": false, "beklenen_belgeler": [], "include_superseded": false},
+  {"id": "U3", "soru": "Pist bakım ihalesi hangi firmaya verildi?", "cevaplanabilir": false, "beklenen_belgeler": [], "include_superseded": false}
+]
