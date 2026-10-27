@@ -10,7 +10,7 @@
 | `bm25` | Anahtar kelime araması (aşağıda). Gömme çağrısı yapmaz, model uyuşmazlığına bakmaz. |
 | `hybrid` | İki yöntemin sıralarını RRF ile birleştirir. Vektör tarafı için gömme çağrısı yapar ve model uyuşmazlığında `vector` gibi reddeder. |
 
-`search()`, `GET /rag/search` ve `scripts/rag_ara.py` (`--method`) aynı `method` seçeneğini alır; geçersiz değer `ValueError`, HTTP'de 422 olur. `status`, `language`, `type` ve `doc_id` filtreleri üç yöntemde de aynı çalışır. M5.1'in sonuç alanları değişmez; `score` alanı yöntemin kendi skorudur (hibritte birleşik skor). M5.3'te `vector` ve `hybrid` sonuçlarına ham vektör skoru `vector_score` olarak eklenecek (`bm25`'te yok; `docs/kaynakli.md › Tool`); kod henüz yok. Üç yöntemde de eşit skorda `chunk_id` artan sıralanır (`docs/rag.md` §6); hibritte bunun önüne "vektör sırası önce" kuralı geçer (aşağıda).
+`search()`, `GET /rag/search` ve `scripts/rag_ara.py` (`--method`) aynı `method` seçeneğini alır; geçersiz değer `ValueError`, HTTP'de 422 olur. `status`, `language`, `type` ve `doc_id` filtreleri üç yöntemde de aynı çalışır. M5.1'in sonuç alanları değişmez; `score` alanı yöntemin kendi skorudur (hibritte birleşik skor). `vector` ve `hybrid` sonuçları ayrıca ham vektör skorunu `vector_score` olarak taşır (`bm25`'te yok; `docs/kaynakli.md › Tool`). Üç yöntemde de eşit skorda `chunk_id` artan sıralanır (`docs/rag.md` §6); hibritte bunun önüne "vektör sırası önce" kuralı geçer (aşağıda).
 
 ## BM25 için metin hazırlama
 

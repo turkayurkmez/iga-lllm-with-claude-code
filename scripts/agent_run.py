@@ -11,8 +11,8 @@ token sayılarını, sonda durumu ve son cevabı yazdırır.
   karşılaştırılır; uymayan vaka varsa script 1 ile çıkar.
 
 COPILOT_DATA ortamda ya da .env'de yoksa referans gün verisi kullanılır. Talimat
-sürümü --instruction ile seçilir; verilmezse COPILOT_INSTRUCTION, o da boşsa v1.
-Çıktıda kullanılan dosya ve özeti "talimat: v1.md (Özet: ...)" olarak yazılır.
+sürümü --instruction ile seçilir; verilmezse COPILOT_INSTRUCTION, o da boşsa v3.
+Çıktıda kullanılan dosya ve özeti "talimat: v3.md (Özet: ...)" olarak yazılır.
 
 Repo kökünden çalıştırın:
 python scripts/agent_run.py "Bugün kaç uçuş var?" [--instruction v1]
@@ -261,8 +261,8 @@ def main() -> None:
         "--instruction",
         choices=list(VERSIONS),
         help=(
-            "Talimat sürümü (ör. v1 → backend/instructions/v1.md); verilmezse "
-            "COPILOT_INSTRUCTION, o da boşsa v1"
+            "Talimat sürümü (ör. v3 → backend/instructions/v3.md); verilmezse "
+            "COPILOT_INSTRUCTION, o da boşsa v3"
         ),
     )
     args = parser.parse_args()

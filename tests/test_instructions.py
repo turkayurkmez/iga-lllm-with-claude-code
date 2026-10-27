@@ -23,16 +23,16 @@ def instructions():
     return importlib.import_module("backend.instructions")
 
 
-def test_varsayilan_surum_v1():
-    assert instructions().DEFAULT_VERSION == "v1"
+def test_varsayilan_surum_v3():
+    assert instructions().DEFAULT_VERSION == "v3"
 
 
-def test_ortam_bos_ya_da_tanimsizsa_varsayilan_v1(monkeypatch):
+def test_ortam_bos_ya_da_tanimsizsa_varsayilan_v3(monkeypatch):
     monkeypatch.delenv("COPILOT_INSTRUCTION", raising=False)
-    assert instructions().default_version() == "v1"
+    assert instructions().default_version() == "v3"
 
     monkeypatch.setenv("COPILOT_INSTRUCTION", "  ")
-    assert instructions().default_version() == "v1"
+    assert instructions().default_version() == "v3"
 
 
 def test_ortamdaki_surum_varsayilan_olur(monkeypatch):
@@ -41,16 +41,17 @@ def test_ortamdaki_surum_varsayilan_olur(monkeypatch):
     assert instructions().default_version() == "v7"
 
 
-def test_varsayilan_yukleme_v1_dosyasini_doner():
-    expected = (INSTRUCTIONS_DIR / "v1.md").read_text(encoding="utf-8")
+def test_varsayilan_yukleme_v3_dosyasini_doner():
+    expected = (INSTRUCTIONS_DIR / "v3.md").read_text(encoding="utf-8")
 
     assert instructions().load() == expected
 
 
-def test_surum_verilince_o_dosya_yuklenir():
-    expected = (INSTRUCTIONS_DIR / "v1.md").read_text(encoding="utf-8")
+@pytest.mark.parametrize("name", ["v1", "v2", "v3"])
+def test_surum_verilince_o_dosya_yuklenir(name):
+    expected = (INSTRUCTIONS_DIR / f"{name}.md").read_text(encoding="utf-8")
 
-    assert instructions().load("v1") == expected
+    assert instructions().load(name) == expected
 
 
 @pytest.mark.parametrize("version", ["v999", "v0", "1", "v1.md", "../prompts", ""])
@@ -78,7 +79,7 @@ def test_kayitli_surumler_semver_bicimli():
         assert name == f"v{major}", f"{name} dosyası {version} sürümünü taşıyamaz."
 
 
-@pytest.mark.parametrize("name", ["v1"])
+@pytest.mark.parametrize("name", ["v1", "v2", "v3"])
 def test_surum_dosyasi_kirk_satiri_asmaz(name):
     lines = (INSTRUCTIONS_DIR / f"{name}.md").read_text(encoding="utf-8").splitlines()
 

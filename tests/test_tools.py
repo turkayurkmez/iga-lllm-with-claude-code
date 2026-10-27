@@ -303,7 +303,8 @@ def test_tool_definitions_kontratlarla_birebir_aynidir():
             key: load_contract(name)[key]
             for key in ("name", "description", "input_schema")
         }
-        for name in TOOL_NAMES
+        # search_documents COPILOT_DATA okumaz; sözleşmesi tests/test_search_documents.py'de.
+        for name in [*TOOL_NAMES, "search_documents"]
     ]
     assert load_tools().tool_definitions() == expected
 

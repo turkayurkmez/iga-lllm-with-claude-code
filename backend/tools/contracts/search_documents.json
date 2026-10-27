@@ -1,0 +1,124 @@
+{
+  "name": "search_documents",
+  "version": "1.0.0",
+  "description": "Korpustaki belgelerde (Aerodrome Manual, SOP, yerel talimat, sözleşme özeti, SLA eki, eğitim materyali vb.) arama yapar ve ilgili belge parçalarını döndürür: chunk_id, doc_id, title (belge adı), section (bölüm), revision, effective_from (yürürlük tarihi), status (active ya da superseded), supersedes / superseded_by (varsa), authority, priority_level (kaynak düzeyi: 1 en yüksek, 5 en düşük öncelik), language ve text (parça metni). En fazla 5 parça döner; include_superseded true ise en fazla 8. Hiç ilgili parça bulunamazsa NOT_FOUND döner.\n\nNe zaman kullanılır: prosedür, kural, sınır ve politika soruları; \"ne değişti\" ya da eski sürüm soruları (include_superseded true ile). Örnek: \"Tip II sıvı için holdover süresi nedir?\" → {\"query\": \"Tip II sıvı holdover süresi\"}; \"Düşük görüşte yeni prosedürde ne değişti?\" → {\"query\": \"düşük görüş operasyonu prosedürü\", \"include_superseded\": true}.\n\nNe zaman KULLANILMAZ: canlı uçuş, stand ya da konum bilgisi istendiğinde (get_flight_details kullan); uçuş sayısı istendiğinde (get_flight_summary kullan); sayıyı hesaplamak için. NOT_FOUND döndüğünde belgelerde kaynak bulunamadığını söyle; hafızandan cevap verme.",
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "query": {
+        "type": "string",
+        "pattern": "\\S",
+        "description": "Doğal dil sorgusu; kullanıcının sorusunun belge aramasına uygun hali. Boş olamaz.",
+        "examples": ["Tip II sıvı için holdover süresi", "PBB arızası prosedürü"]
+      },
+      "include_superseded": {
+        "type": "boolean",
+        "default": false,
+        "description": "true ise yürürlükten kalkmış (superseded) eski sürümler de aranır; yalnızca eski sürüm ya da değişiklik sorulduğunda true ver. Varsayılan false: yalnızca yürürlükteki (active) parçalar.",
+        "examples": [false, true]
+      }
+    },
+    "required": ["query"],
+    "additionalProperties": false
+  },
+  "value_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "anyOf": [
+      {
+        "type": "null",
+        "description": "İlgili parça yok (NOT_FOUND)."
+      },
+      {
+        "type": "array",
+        "description": "İlgili parçalar, en ilgili önce; en fazla 5 (include_superseded true ise 8).",
+        "items": {
+          "type": "object",
+          "properties": {
+            "chunk_id": {
+              "type": "string",
+              "pattern": "^D\\d{2}#\\d{2,}$",
+              "description": "Parça kimliği; cevapta atıf etiketi olarak yazılır.",
+              "examples": ["D03#02"]
+            },
+            "doc_id": {
+              "type": "string",
+              "description": "Belge kimliği.",
+              "examples": ["D03"]
+            },
+            "title": {
+              "type": "string",
+              "description": "Belgenin adı.",
+              "examples": ["Aerodrome Manual — Düşük Görüş Operasyonu"]
+            },
+            "section": {
+              "type": "string",
+              "description": "Parçanın bölüm yolu.",
+              "examples": ["Düşük Görüş > Başlatma Koşulları"]
+            },
+            "revision": {
+              "type": "string",
+              "description": "Belge revizyonu.",
+              "examples": ["2"]
+            },
+            "effective_from": {
+              "type": "string",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+              "description": "Yürürlük tarihi, YYYY-AA-GG.",
+              "examples": ["2026-03-01"]
+            },
+            "status": {
+              "type": "string",
+              "enum": ["active", "superseded"],
+              "description": "Belgenin sürüm durumu: active yürürlükte, superseded eski sürüm.",
+              "examples": ["active"]
+            },
+            "supersedes": {
+              "type": "string",
+              "description": "Bu belgenin yerine geçtiği belgenin kimliği; yoksa alan yoktur.",
+              "examples": ["D02"]
+            },
+            "superseded_by": {
+              "type": "string",
+              "description": "Bu belgenin yerine geçen belgenin kimliği; yoksa alan yoktur.",
+              "examples": ["D03"]
+            },
+            "authority": {
+              "type": "string",
+              "description": "Belgeyi yayımlayan makam.",
+              "examples": ["Gökçe Havalimanı Meydan Müdürlüğü"]
+            },
+            "priority_level": {
+              "type": "integer",
+              "enum": [1, 2, 3, 4, 5],
+              "description": "Kaynak düzeyi: 1 en yüksek, 5 en düşük öncelik.",
+              "examples": [3]
+            },
+            "language": {
+              "type": "string",
+              "description": "Parçanın dili (tr ya da en).",
+              "examples": ["tr"]
+            },
+            "text": {
+              "type": "string",
+              "description": "Parça metni."
+            }
+          },
+          "required": [
+            "chunk_id",
+            "doc_id",
+            "title",
+            "section",
+            "revision",
+            "effective_from",
+            "status",
+            "authority",
+            "priority_level",
+            "language",
+            "text"
+          ],
+          "additionalProperties": false
+        }
+      }
+    ]
+  }
+}

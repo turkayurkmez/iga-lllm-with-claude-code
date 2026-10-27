@@ -1,6 +1,6 @@
 # Kaynaklı Cevap Sözleşmesi
 
-Bu belge `search_documents` tool'unun, atıf denetiminin ve talimat v3'ün tek kaynağıdır. Talimat sürümleri: v1 yürürlükte, v2 `docs/chat.md › Talimat v2`'de planlı, v3 bu belgeye göre yazılır. Eşik değeri burada yazılmaz: `.env`'den okunur (`COPILOT_RAG_ESIK`; `.env.example`'a tool kodlanırken eklenir).
+Bu belge `search_documents` tool'unun, atıf denetiminin ve talimat v3'ün tek kaynağıdır. Talimat sürümleri: v1 (arşiv), v2 yazıldı (`backend/instructions/v2.md`, `docs/chat.md › Talimat v2`: Dayanak kalkar vb.), v3 yürürlükte (`backend/instructions/v3.md`: v2 + atıf, sürüm, çelişki ve bilmiyorum kuralları; `docs/system-talimat.md` ilke 9-12). Eşik değeri burada yazılmaz: `.env`'den okunur (`COPILOT_RAG_ESIK`; `.env.example`'a tool kodlanırken eklenir).
 
 ## Tool
 
@@ -30,9 +30,9 @@ Bu belge `search_documents` tool'unun, atıf denetiminin ve talimat v3'ün tek k
 
 `search()` çıktısı `chunk_id, doc_id, revision, status, language, section, text` alanlarını taşır; tool `title`, `effective_from`, `authority`'yi ve `priority_level`'i hesaplamak için `type`'ı `chunk_id` ile `chunks.json`'dan ekler. `search()` çıktısı bu alanlar için değişmez.
 
-**Skor modele gönderilmez.** Eşik için `search()` (M5.3'te) `vector` ve `hybrid` sonuçlarına ham vektör skorunu `vector_score` olarak ekler (iç çarpım; `bm25` sonucunda yoktur). Hibritte `score` RRF skoru olarak kalır, `vector_score` ayrıdır. Tool eşiği uyguladıktan sonra `vector_score`'u `value`'dan çıkarır. Kod henüz yok; ekleme `docs/hibrit.md › Yöntemler`'deki sonuç alanları paragrafında da belirtilir.
+**Skor modele gönderilmez.** Eşik için `search()` (M5.3'te) `vector` ve `hybrid` sonuçlarına ham vektör skorunu `vector_score` olarak ekler (iç çarpım; `bm25` sonucunda yoktur). Hibritte `score` RRF skoru olarak kalır, `vector_score` ayrıdır. Tool eşiği uyguladıktan sonra `vector_score`'u `value`'dan çıkarır. Kod: `backend/tools/search_documents.py`, kontrat `backend/tools/contracts/search_documents.json`, testler `tests/test_search_documents.py`. Tool `hybrid` yöntemiyle arar (`priority` kapalı); `search.load_chunks()` parça bilgilerini, `search.rag_threshold()` eşiği verir.
 
-**Eşik:** dönen parçaların en yüksek `vector_score`'u `COPILOT_RAG_ESIK` değerinin altındaysa `value` `null`, `error.code` = `NOT_FOUND` döner. Eşik hibritin `score`'una (RRF) uygulanmaz. `bm25`'te `vector_score` olmadığı için tool `vector` ya da `hybrid` ile arar.
+**Eşik:** dönen parçaların en yüksek `vector_score`'u `COPILOT_RAG_ESIK` değerinin altındaysa (eşitse geçer) `value` `null`, `error.code` = `NOT_FOUND` döner. Eşik hibritin `score`'una (RRF) uygulanmaz. `bm25`'te `vector_score` olmadığı için tool `vector` ya da `hybrid` ile arar.
 
 **Hatalar:**
 

@@ -12,7 +12,7 @@ Döngü tek bir fonksiyondur: `backend.agent.run_agent(question, client=None, in
 |---|---|---|---|
 | `question` | metin | evet | Operatörün sorusu, olduğu gibi. Kırpılmaz, yeniden yazılmaz; modele ilk `user` mesajı olarak gider. |
 | `client` | senkron Anthropic istemcisi | hayır | Model çağrıları `client.messages.create(**istek)` ile yapılır. Verilmezse `backend.llm.client` kullanılır. Testler buraya sahte istemci verir. |
-| `instruction_version` | metin | hayır | System talimatının sürüm dosyası adı (`backend/instructions/<ad>.md`; `docs/system-talimat.md` › Versiyonlama). Verilmezse `backend.instructions.default_version()`: ortamdaki `COPILOT_INSTRUCTION`, boşsa `v1`. Ortam, `backend.llm` `.env`'yi yükledikten sonra okunur. |
+| `instruction_version` | metin | hayır | System talimatının sürüm dosyası adı (`backend/instructions/<ad>.md`; `docs/system-talimat.md` › Versiyonlama). Verilmezse `backend.instructions.default_version()`: ortamdaki `COPILOT_INSTRUCTION`, boşsa `v3`. Ortam, `backend.llm` `.env`'yi yükledikten sonra okunur. |
 
 - Boş ya da yalnızca boşluktan oluşan soru reddedilir: `ValueError` fırlar, döngü başlamaz, API çağrısı yapılmaz.
 - Kayıtlı olmayan sürüm (`backend.instructions.VERSIONS`'ta yok) reddedilir: `"Bilinmeyen talimat sürümü"` ile başlayan `ValueError` fırlar, API çağrısı yapılmaz. Sürüm parametreyle verildiyse `backend.llm` de yüklenmez; ortamdan geldiyse hata `.env` yüklendikten sonra, ilk model çağrısından önce fırlar. Parametre ortamın önüne geçer.
@@ -144,7 +144,7 @@ Değerler `data/referans/seed42-2026-10-20.json`'dan; `COPILOT_NOW=2026-10-20T16
 }
 ```
 
-`summary` `backend/instructions/v1.md`'nin şu anki metnine aittir; metin değişince değişir (testler beklenen değeri dosyadan hesaplar).
+`summary` `backend/instructions/v3.md`'nin şu anki metnine aittir; metin değişince değişir (testler beklenen değeri dosyadan hesaplar).
 
 Aynı soruda model `{"direction": "ALL"}`'u üç kez isterse: 1. ve 2. turda çağrı çalışır ve `SCHEMA_VALIDATION_FAILED` (`is_error: true`) döner; 3. turda istek çalıştırılmaz, sonuç `status: "tekrar_siniri"`, `reason: "Aynı tool çağrısı 3. kez istendi: get_flight_summary."`, `turns` 3 öğe, 3. öğede `executed: false`, `envelope: null`.
 

@@ -10,12 +10,14 @@ import os
 from pathlib import Path
 
 # COPILOT_INSTRUCTION boş ya da tanımsızsa kullanılan sürüm.
-DEFAULT_VERSION = "v1"
+DEFAULT_VERSION = "v3"
 ENV_VAR = "COPILOT_INSTRUCTION"
 
 # Dosya adı → tam sürüm. Metin değişince buradaki sürüm de artar.
 VERSIONS = {
     "v1": "1.0.0",
+    "v2": "2.0.0",
+    "v3": "3.0.0",
 }
 
 _DIR = Path(__file__).resolve().parent

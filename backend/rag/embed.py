@@ -52,6 +52,11 @@ def _setting(name: str) -> str:
     return value
 
 
+def setting(name: str) -> str:
+    """Zorunlu ayar (`.env`'den ya da ortamdan); eksik ya da boşsa `EmbedConfigError`."""
+    return _setting(name)
+
+
 def embed_model() -> str:
     """Ayarlı gömme modeli (`COPILOT_EMBED_MODEL`); eksikse `EmbedConfigError`."""
     return _setting("COPILOT_EMBED_MODEL")

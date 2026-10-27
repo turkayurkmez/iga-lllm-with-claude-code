@@ -118,7 +118,7 @@ def run_agent(
 ) -> AgentResult:
     """Soruyu agent döngüsünden geçirir; API ve ayar hataları çağırana fırlar.
 
-    instruction_version verilmezse COPILOT_INSTRUCTION (boşsa v1) kullanılır.
+    instruction_version verilmezse COPILOT_INSTRUCTION (boşsa v3) kullanılır.
     """
     if not question.strip():
         raise ValueError("Soru boş olamaz.")

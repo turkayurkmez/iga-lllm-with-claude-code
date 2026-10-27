@@ -108,7 +108,7 @@ Senaryolar `docs/bozulma.md`'de; zarf biçimleri `docs/zarf.md` ve `docs/tools.m
 
 ## Talimat v2
 
-`backend/instructions/v2.md`, `VERSIONS["v2"] = "2.0.0"`. Cevap yapısının bir parçası kalktığı için değişiklik MAJOR'dur; dosya açma, sürüm, Değişiklik günlüğü ve ölçüm kuralları `docs/system-talimat.md` › Versiyonlama'daki gibidir. `/chat` sürümü `default_version()` ile okur; v2'ye geçiş `COPILOT_INSTRUCTION=v2` ile yapılır.
+`backend/instructions/v2.md`, `VERSIONS["v2"] = "2.0.0"` (yazıldı; testleri `tests/test_instruction_v2.py`). Etkin sürüm v3'tür: `backend/instructions/v3.md` v2'nin tüm değişikliklerini içerir ve üstüne kaynaklı cevap ilkelerini ekler (`docs/kaynakli.md`). Cevap yapısının bir parçası kalktığı için değişiklik MAJOR'dur; dosya açma, sürüm, Değişiklik günlüğü ve ölçüm kuralları `docs/system-talimat.md` › Versiyonlama'daki gibidir. `/chat` sürümü `default_version()` ile okur; v2'ye geçiş `COPILOT_INSTRUCTION=v2` ile yapılır.
 
 v1'in sekiz çekirdek ilkesi kalır. Değişenler:
 

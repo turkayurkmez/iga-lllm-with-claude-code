@@ -1,8 +1,8 @@
 """Ortak pytest ayarları: talimat sürümü seçimi (docs/system-talimat.md › Versiyonlama).
 
-`--instruction v1` agent testlerinin kullandığı talimat dosyasını seçer
-(backend/instructions/v1.md). Verilmezse sırayla ortamdaki COPILOT_INSTRUCTION,
-.env'deki değer ve v1 kullanılır. Seçilen dosya ve özeti oturum sonunda yazılır.
+`--instruction v3` agent testlerinin kullandığı talimat dosyasını seçer
+(backend/instructions/v3.md). Verilmezse sırayla ortamdaki COPILOT_INSTRUCTION,
+.env'deki değer ve v3 kullanılır. Seçilen dosya ve özeti oturum sonunda yazılır.
 """
 
 import hashlib
@@ -16,7 +16,7 @@ from dotenv import dotenv_values
 REPO_ROOT = Path(__file__).resolve().parent.parent
 INSTRUCTIONS_DIR = REPO_ROOT / "backend" / "instructions"
 ENV_VAR = "COPILOT_INSTRUCTION"
-FALLBACK = "v1"
+FALLBACK = "v3"
 NAME_PATTERN = re.compile(r"^v\d+$")
 INSTRUCTION_KEY = pytest.StashKey[str]()
 

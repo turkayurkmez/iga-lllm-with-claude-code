@@ -7,12 +7,13 @@ yapılmadan reddedilir. Modele parça göndermez (M5.3).
 """
 
 import json
+import math
 from pathlib import Path
 
 import numpy as np
 
 from backend.rag import bm25
-from backend.rag.embed import embed_model, embed_query
+from backend.rag.embed import EmbedConfigError, embed_model, embed_query, setting
 from backend.rag.index import CHUNKS_FILE, INDEX_DIR, META_FILE, VECTORS_FILE
 
 DEFAULT_K = 5
@@ -72,6 +73,29 @@ def _load_index(index_dir: Path) -> tuple[dict, list[dict], np.ndarray]:
             f"İndeks tutarsız ({index_dir}); scripts/rag_indeksle.py ile yeniden kurun."
         )
     return meta, chunks, vectors
+
+
+def load_chunks(index_dir: Path | str | None = None) -> list[dict]:
+    """İndeksteki parçalar (docs/rag.md §3 alanları); `index_dir` verilmezse `INDEX_DIR`."""
+    return _load_index(Path(INDEX_DIR if index_dir is None else index_dir))[1]
+
+
+def rag_threshold() -> float:
+    """`COPILOT_RAG_ESIK`: kaynaklı cevap eşiği (docs/kaynakli.md › Eşik).
+
+    Her çağrıda okunur. Eksik, boş, sayı olmayan ya da sonlu olmayan değerde
+    `EmbedConfigError` fırlatır.
+    """
+    raw = setting("COPILOT_RAG_ESIK")
+    try:
+        value = float(raw)
+    except ValueError:
+        value = math.nan
+    if not math.isfinite(value):
+        raise EmbedConfigError(
+            f"COPILOT_RAG_ESIK sayı olmalı (ör. 0.5): {raw!r}."
+        ) from None
+    return value
 
 
 def _fuse(
@@ -144,6 +168,7 @@ def search(
     `method="vector"` (varsayılan) ve `"hybrid"`: `model` verilmezse
     `COPILOT_EMBED_MODEL` okunur ve indeksin modeliyle karşılaştırılır.
     `method="bm25"`: gömme çağrısı yapmaz, model ve `client` kullanılmaz.
+    `"vector"` ve `"hybrid"` sonuçları ham iç çarpımı `vector_score` olarak da taşır.
     `"hybrid"`: iki yöntemin ilk `rrf_candidates` adayı RRF ile birleşir
     (docs/hibrit.md). `priority=True` yalnızca `"hybrid"` ile geçerlidir: birleşik
     skor belge türünün çarpanıyla çarpılır ve liste yeniden sıralanır. `index_dir`
@@ -200,6 +225,7 @@ def search(
             embed_query(query, client=client, model=expected), dtype=np.float64
         )
         scores = vectors[candidates].astype(np.float64) @ query_vector
+        vector_scores = dict(zip(candidates, scores.tolist(), strict=True))
         vector_ranked = by_score_then_id(
             list(zip(scores.tolist(), candidates, strict=True))
         )
@@ -225,6 +251,8 @@ def search(
             "score": score,
             **{field: chunks[i][field] for field in RESULT_FIELDS},
             "text": chunks[i]["text"],
+            # Ham iç çarpım (docs/kaynakli.md › Eşik); bm25 gömme yapmadığı için yok.
+            **({} if method == "bm25" else {"vector_score": vector_scores[i]}),
         }
         for score, i in ranked[:k]
     ]

@@ -34,6 +34,7 @@ from backend.tools.harita import (
     highlight_map_set,
 )
 from backend.tools.resolve_flight_identity import resolve_flight_identity
+from backend.tools.search_documents import search_documents
 
 __all__ = ["run_tool", "tool_definitions"]
 
@@ -47,6 +48,7 @@ IMPLEMENTATIONS: dict[str, Callable[..., dict]] = {
     "get_flight_details": get_flight_details,
     "focus_map_object": focus_map_object,
     "highlight_map_set": highlight_map_set,
+    "search_documents": search_documents,
 }
 
 # Şemanın anlatamadığı argüman kuralları (yalnızca olan tool'lar).

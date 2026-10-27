@@ -24,6 +24,7 @@ TOOL_NAMES = (
     "get_flight_details",
     "focus_map_object",
     "highlight_map_set",
+    "search_documents",
 )
 
 
@@ -50,6 +51,13 @@ def args_model(
     verilir; şema geçtikten sonra çağrılır, hata mesajı döndürürse argüman reddedilir.
     """
     validator = Draft202012Validator(input_schema)
+    # Verilmeyen alanların şemadaki varsayılanı doğrulanmış argümana (ve zarfın
+    # `filters`'ına) girer (docs/zarf.md › filters).
+    defaults = {
+        name: prop["default"]
+        for name, prop in input_schema.get("properties", {}).items()
+        if "default" in prop
+    }
 
     class Args(BaseModel):
         # Ek alanları şema reddeder; geçenler model_dump'ta aynen döner.
@@ -61,6 +69,7 @@ def args_model(
             errors = sorted(validator.iter_errors(data), key=str)
             if errors:
                 raise ValueError("; ".join(error.message for error in errors))
+            data = {**defaults, **data}
             if extra_check is not None:
                 message = extra_check(data)
                 if message:

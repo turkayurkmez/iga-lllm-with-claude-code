@@ -129,7 +129,7 @@ python -m eval.run --kuru [--soru ...] [--data ... | --seed ... --date ...]
 | `--out` | `--kuru` yoksa evet | Sonuç dosyası. Varsa üzerine yazmaz: `Hata:` ve 1. Klasörü yoksa oluşturulur. |
 | `--soru` | hayır | Virgülle ayrılmış `id`'ler; verilmezse 20 soru. Bilinmeyen `id` hata. |
 | `--tekrar` | hayır | Soru başına koşum sayısı, varsayılan 1, en az 1. |
-| `--instruction` | hayır | `run_agent`'a `instruction_version` olarak gider; verilmezse `COPILOT_INSTRUCTION`, boşsa `v1`. Geçersizse `Hata:` ve 1. |
+| `--instruction` | hayır | `run_agent`'a `instruction_version` olarak gider; verilmezse `COPILOT_INSTRUCTION`, boşsa `v3`. Geçersizse `Hata:` ve 1. |
 | `--data` | hayır | Temel veri dosyası. Varsayılan `data/referans/seed42-2026-10-20.json`. |
 | `--seed`, `--date` | hayır, birlikte | Temel veriyi `synth.generator` ile geçici klasörde üretir. `--data` ile birlikte verilemez. |
 | `--kuru` | hayır | Model çağrılmaz, `backend.llm` yüklenmez. stdout'a soru başına bir JSON satırı yazar, başka bir şey yazmaz: `{"id", "question" (doldurulmuş), "corruption", "now", "expect", "forbid", "error"}`. `expect`/`forbid` metne çevrilmiş değerlerdir (listeler açılır, her değerin ilk yazımı); `error` `hesap_hatasi` ya da `null`. Hesap hatası varsa 1 ile çıkar. Golden set ya da hesap değişince ilk bu çalıştırılır. |
