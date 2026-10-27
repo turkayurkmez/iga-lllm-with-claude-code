@@ -4,13 +4,13 @@
 
 ## Yöntemler
 
-| `yontem` | Ne yapar |
+| `method` | Ne yapar |
 |---|---|
-| `vektor` | M5.1'deki arama. Varsayılan. |
-| `bm25` | Anahtar kelime araması (aşağıda). |
-| `hibrit` | İki yöntemin sıralarını RRF ile birleştirir. |
+| `vector` | M5.1'deki arama. Varsayılan. |
+| `bm25` | Anahtar kelime araması (aşağıda). Gömme çağrısı yapmaz, model uyuşmazlığına bakmaz. |
+| `hybrid` | İki yöntemin sıralarını RRF ile birleştirir. Vektör tarafı için gömme çağrısı yapar ve model uyuşmazlığında `vector` gibi reddeder. |
 
-`GET /rag/search` ve `scripts/rag_ara.py` aynı `yontem` seçeneğini alır. Durum, dil ve tür filtreleri üç yöntemde de aynı çalışır. M5.1'in sonuç alanları değişmez; `skor` alanı yöntemin kendi skorudur (hibritte birleşik skor).
+`search()`, `GET /rag/search` ve `scripts/rag_ara.py` (`--method`) aynı `method` seçeneğini alır; geçersiz değer `ValueError`, HTTP'de 422 olur. `status`, `language`, `type` ve `doc_id` filtreleri üç yöntemde de aynı çalışır. M5.1'in sonuç alanları değişmez; `score` alanı yöntemin kendi skorudur (hibritte birleşik skor). Üç yöntemde de eşit skorda `chunk_id` artan sıralanır (`docs/rag.md` §6); hibritte bunun önüne "vektör sırası önce" kuralı geçer (aşağıda).
 
 ## BM25 için metin hazırlama
 
@@ -37,15 +37,15 @@ Testlerin kapsayacağı örnekler:
 
 ## BM25 skoru
 
-Okapi BM25, `k1 = 1.5`, `b = 0.75`. `idf = ln(1 + (N − n + 0.5) / (n + 0.5))`; `N` indeksteki parça sayısı, `n` sözcüğün geçtiği parça sayısı. `idf` ve ortalama parça uzunluğu indeksteki tüm parçalardan hesaplanır; filtreye uyan parçalar arasında sıralama yapılır. Skoru 0 olan parça sonuç değildir; hiçbir sözcük eşleşmezse liste boştur. İndeks bellekte, ilk aramada kurulur; diske yazılmaz.
+Okapi BM25, `k1 = 1.5`, `b = 0.75`. `idf = ln(1 + (N − n + 0.5) / (n + 0.5))`; `N` indeksteki parça sayısı, `n` sözcüğün geçtiği parça sayısı. `idf` ve ortalama parça uzunluğu indeksteki tüm parçalardan hesaplanır; filtreye uyan parçalar arasında sıralama yapılır. Skoru 0 olan parça sonuç değildir; hiçbir sözcük eşleşmezse liste boştur. BM25 tablosu her aramada, `search()`'ün o çağrıda okuduğu parçalardan bellekte kurulur; süreç önbelleği ve diske yazılan dosya yoktur (vektör araması da indeksi her çağrıda okur; `rag_indeksle.py` sunucu çalışırken indeksi yenilese bile arama eski veriye bakmaz).
 
 ## Hibrit
 
-Her iki yöntemden, filtreye uyan ilk 20 aday alınır. Birleşik skor: `skor = Σ 1 / (60 + sıra)`; sıra 1'den başlar, parça bir listede yoksa o listenin terimi eklenmez. Eşit skorda vektör sırası önce gelir. İlk 5 parça döner. Aday sayısı (20) ve sabit (60) ayarlanabilir; varsayılanlar bunlardır.
+Her iki yöntemden, filtreye uyan ilk 20 aday alınır. Birleşik skor: `score = Σ 1 / (60 + sıra)`; sıra 1'den başlar, parça bir listede yoksa o listenin terimi eklenmez. Eşit skorda vektör sırası önce gelir; vektör listesinde olmayanlar kendi aralarında `chunk_id` artan sıralanır. İlk `k` parça döner (`k` varsayılan 5, en çok 20). Aday sayısı (20) ve sabit (60) `search()` argümanlarıyla ayarlanabilir; varsayılanlar bunlardır.
 
 ## Kaynak önceliği
 
-`oncelik` seçeneği yalnızca hibritte vardır ve varsayılan kapalıdır; kapalıyken sıralama hiç değişmez. Açıkken: `skor = birleşik skor × çarpan`, `çarpan = 1.00 − 0.03 × (düzey − 1)`. Düzey, belgenin `type` değerinden gelir; aşağıdaki belgelerin hangi düzeyde olduğu sabittir, `type` → düzey eşlemesi korpusun metadata'sına bakılarak yazılır.
+`priority` seçeneği yalnızca `hybrid`'de vardır ve varsayılan kapalıdır (`false`); kapalıyken sıralama hiç değişmez. `vector` ya da `bm25` ile açılırsa `ValueError` (HTTP'de 422) olur. Açıkken: `score = birleşik skor × çarpan`, `çarpan = 1.00 − 0.03 × (düzey − 1)`; çarpan uygulandıktan sonra liste yeniden sıralanır. Düzey, belgenin `type` değerinden gelir; aşağıdaki belgelerin hangi düzeyde olduğu sabittir, `type` → düzey eşlemesi korpusun metadata'sına bakılarak yazılır.
 
 | Düzey | Çarpan | Belgeler |
 |---|---|---|
@@ -57,21 +57,27 @@ Her iki yöntemden, filtreye uyan ilk 20 aday alınır. Birleşik skor: `skor = 
 
 Çarpan filtre değildir: yalnızca düşük öncelikli bir belgenin cevap verdiği soruda o belge yine görünür. Çarpan yalnızca birbirine yakın skorları ayırır.
 
+## HTTP
+
+`GET /rag/search` (`docs/rag.md` §7) iki sorgu parametresi alır: `method` (`vector`, `bm25`, `hybrid`; varsayılan `vector`) ve `priority` (`true`/`false`). Geçersiz `method` ya da `hybrid` dışında `priority=true` 422 döner. 200 gövdesine `method` ve `priority` eklenir: `{"query", "k", "method", "priority", "filters", "results"}`. `bm25` gömme çağrısı yapmadığı için `INDEX_MODEL_MISMATCH` ve gömme hatası üretmez; `INDEX_NOT_READY` yine olur.
+
 ## Ölçüt
 
 - **recall@5:** sorunun `beklenen_belge` listesinden, ilk 5 parçada görünen belgelerin oranı. Belge düzeyinde; aynı belgenin birden çok parçası bir kez sayılır. Soru tipi başına ortalama alınır.
 - **İlk sıra doğru:** yalnızca `oncelik` tipindeki sorularda: ilk parçanın belgesi `ilk_beklenen` ile aynı mı. Sonuç `n/3` olarak yazılır.
 
-Tablo biçimi (`scripts/rag_karsilastir.py` yazar, `eval/sonuc/` altına da kaydeder):
+Sorular `eval/arama_sorulari.json`'dadır; bu dosya ölçümler karşılaştırılabilir kalsın diye değiştirilmez.
+
+Tablo biçimi (`scripts/rag_karsilastir.py` yazar, `eval/out/` altına da kaydeder; `eval/out/` `.gitignore`'dadır ve var olan sonuç dosyasının üzerine yazılmaz, `eval.run` gibi):
 
 | Yöntem | Kelime | Anlam | Çapraz dil | Öncelik | Tümü | İlk sıra doğru |
 |---|---|---|---|---|---|---|
 
-Satırlar: `bm25`, `vektor`, `hibrit`; `oncelik` uygulanmışsa `hibrit + oncelik`. Sütunlar 0.00–1.00 arası recall@5.
+Satırlar: `bm25`, `vector`, `hybrid`; `priority` uygulanmışsa `hybrid + priority`. Sütunlar 0.00–1.00 arası recall@5. `rag_karsilastir.py` gerçek Voyage çağrısı yapar (ücretli; önbellek sayesinde aynı sorular tekrar gömülmez), `rag_ara.py` gibi docstring'inde bunu belirtir.
 
 ## Önbellek ve istek sayısı
 
-Sorgu vektörleri `data/indeks/sorgu_onbellegi.json` içinde, model ve sorgu metni anahtarıyla tutulur. Önbellekte olmayan sorgular tek istekle gömülür. Testler ağa çıkmaz, `.env`'e ihtiyaç duymaz.
+Sorgu vektörleri `data/sorgu_onbellegi.json` içinde, model ve sorgu metni anahtarıyla tutulur. Dosya indeks klasörünün **dışındadır**: arama indeksi değiştirmez ve `build_index` klasörü yerine koyarken önbellek silinmez. `.gitignore`'a eklenir. Yolu `INDEX_DIR`'den bağımsız bir modül değişkenidir, testler tmp'ye yönlendirir. Gömme yalnızca `backend/rag/embed.py`'den çağrılır; önbellek ve toplu sorgu gömme (en çok 128 sorgu bir istekte, `BATCH_SIZE`) orada durur. Önbellekte olmayan sorgular tek istekle gömülür. Dosya zaman damgası taşımaz (`docs/rag.md` §4). Yazma geçici dosya + `os.replace` ile yapılır ve `index.py › _replace` gibi `PermissionError`'da 5 kez yeniden dener (`/rag/search` thread havuzunda çalışır). Önbellek bozuksa ya da okunamıyorsa yok sayılır ve sorgu yeniden gömülür; yazılamıyorsa arama yine de sonuç döner. Testler ağa çıkmaz, `.env`'e ihtiyaç duymaz.
 
 ## Kapsam dışı (bu modülde)
 
