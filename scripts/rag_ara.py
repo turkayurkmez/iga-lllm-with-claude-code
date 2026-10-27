@@ -1,10 +1,12 @@
-"""RAG indeksinde komut satırından arama (docs/rag.md §6).
+"""RAG indeksinde komut satırından arama (docs/rag.md §6, docs/hibrit.md).
 
-Soruyu gömmek için gerçek Voyage çağrısı yapar (ücretli, soru başına tek istek);
-indeksi değiştirmez. İndeks `scripts/rag_indeksle.py` ile kurulur.
+`--method vector` (varsayılan) ve `hybrid` soruyu gömmek için gerçek Voyage çağrısı
+yapar (ücretli, soru başına tek istek); `bm25` gömme yapmaz, `.env` istemez.
+İndeksi değiştirmez. İndeks `scripts/rag_indeksle.py` ile kurulur.
 
 Kullanım (repo kökünden):
     $env:PYTHONIOENCODING="utf-8"; python scripts/rag_ara.py "pist kapanış prosedürü"
+    python scripts/rag_ara.py "TK2345 gecikme" --method bm25
     python scripts/rag_ara.py "soru" -k 3 --status active --language tr
     python scripts/rag_ara.py "soru" --type procedure --doc-id D05
 """
@@ -19,6 +21,7 @@ from backend.rag.embed import EmbedConfigError, EmbedError
 from backend.rag.index import INDEX_DIR
 from backend.rag.search import (
     DEFAULT_K,
+    METHODS,
     IndexModelMismatchError,
     IndexNotReadyError,
     search,
@@ -33,6 +36,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--language", help="Filtre: tr ya da en.")
     parser.add_argument("--type", help="Filtre: belge türü.")
     parser.add_argument("--doc-id", help="Filtre: belge kimliği (ör. D05).")
+    parser.add_argument(
+        "--method",
+        choices=METHODS,
+        default="vector",
+        help="Arama yöntemi; bm25 gömme (Voyage) ayarı istemez.",
+    )
     parser.add_argument("--indeks", default=str(INDEX_DIR), help="İndeks klasörü.")
     args = parser.parse_args(argv)
 
@@ -44,6 +53,7 @@ def main(argv: list[str] | None = None) -> int:
             language=args.language,
             type=args.type,
             doc_id=args.doc_id,
+            method=args.method,
             index_dir=args.indeks,
         )
     except (
