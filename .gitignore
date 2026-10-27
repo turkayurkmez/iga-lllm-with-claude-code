@@ -60,3 +60,8 @@ logs/
 # ───────── Claude Code ─────────
 .claude/settings.local.json
 .superpowers/
+
+# ───────── RAG indeksi (scripts/rag_indeksle.py ile yeniden kurulur) ─────────
+data/indeks/
+data/indeks.yeni/
+data/indeks.eski/

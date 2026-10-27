@@ -10,12 +10,13 @@ import logging
 from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 from types import ModuleType
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 import anthropic
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import Response, StreamingResponse
 from pydantic import (
+    AfterValidator,
     BaseModel,
     ConfigDict,
     Field,
@@ -27,6 +28,8 @@ from starlette.concurrency import run_in_threadpool
 from backend import audit, instructions, live
 from backend.agent import run_agent
 from backend.cards import CardBuilder
+from backend.rag import search as rag_search
+from backend.rag.embed import EmbedConfigError, EmbedError
 from backend.tools import run_tool, tool_definitions
 from backend.tools._ortak import DataError, load_data
 from backend.tools.harita import ID_PATTERNS, exists
@@ -52,6 +55,14 @@ SELECTED_UNAVAILABLE_MESSAGE = (
     "Seçili nesne şu anda doğrulanamıyor. Lütfen daha sonra tekrar deneyin."
 )
 SELECTED_NOT_FOUND_MESSAGE = "Seçili nesne haritada bulunamadı."
+# docs/rag.md §7: istemciye sabit mesaj gider; ayrıntı (yol, model adı) loga yazılır.
+INDEX_NOT_READY_MESSAGE = "Arama indeksi hazır değil. Önce indeksi kurun."
+INDEX_MODEL_MISMATCH_MESSAGE = (
+    "Arama indeksi ayarlı gömme modeliyle kurulmamış. İndeksi yeniden kurun."
+)
+SEARCH_UNAVAILABLE_MESSAGE = (
+    "Arama şu anda yapılamıyor. Lütfen daha sonra tekrar deneyin."
+)
 # Olay yokken bağlantıyı canlı tutan yorumun aralığı (docs/canli_akis.md › SSE).
 LIVE_PING_INTERVAL_S = 15
 
@@ -404,6 +415,50 @@ def map_stands() -> Response:
         return json_response({"detail": STANDS_UNAVAILABLE_MESSAGE}, 503)
     ordered = sorted(stands, key=lambda stand: str(stand.get("stand_code", "")))
     return json_response({"stands": ordered}, 200)
+
+
+def reject_blank(value: str) -> str:
+    if not value.strip():
+        raise ValueError("q boş olamaz.")
+    return value
+
+
+@app.get("/rag/search")
+def rag_search_endpoint(
+    q: Annotated[str, AfterValidator(reject_blank)],
+    k: Annotated[int, Query(ge=1, le=20)] = rag_search.DEFAULT_K,
+    status: str | None = None,
+    language: str | None = None,
+    type: str | None = None,
+    doc_id: str | None = None,
+) -> Response:
+    """İndekste arama (docs/rag.md §7); zarf değildir, `search()` sonucunu taşır."""
+    # Senkron: gömme isteği ve indeks okuması FastAPI'nin thread havuzunda çalışır.
+    filters = {
+        name: value
+        for name, value in (
+            ("status", status),
+            ("language", language),
+            ("type", type),
+            ("doc_id", doc_id),
+        )
+        if value is not None
+    }
+    try:
+        results = rag_search.search(q, k=k, **filters)
+    except rag_search.IndexNotReadyError as exc:
+        logger.warning("Arama indeksi hazır değil: %s", exc)
+        message, code = INDEX_NOT_READY_MESSAGE, exc.code
+    except rag_search.IndexModelMismatchError as exc:
+        logger.warning("Arama indeksi modeli uyuşmuyor: %s", exc)
+        message, code = INDEX_MODEL_MISMATCH_MESSAGE, exc.code
+    except (EmbedError, EmbedConfigError):
+        logger.exception("Arama sorusu gömülemedi.")
+        return json_response({"detail": SEARCH_UNAVAILABLE_MESSAGE}, 503)
+    else:
+        body = {"query": q, "k": k, "filters": filters, "results": results}
+        return json_response(body, 200)
+    return json_response({"error": {"code": code, "message": message}}, 503)
 
 
 @app.get("/tools")

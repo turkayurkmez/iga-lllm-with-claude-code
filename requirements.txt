@@ -11,6 +11,10 @@ jsonschema==4.26.0
 pydantic-settings==2.16.0
 python-dotenv==1.2.4
 
+# RAG gömme (docs/rag.md §4)
+voyageai==0.5.0
+numpy==2.5.4
+
 # Canlı konum akışı (MQTT, docs/canli_akis.md)
 paho-mqtt==2.1.0
 

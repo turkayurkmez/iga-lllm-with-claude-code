@@ -21,6 +21,7 @@ export default defineConfig(({ mode }) => {
         '/health': backend,
         '/live': backend,
         '/map': backend,
+        '/rag': backend,
         '/tools': backend,
       },
     },
