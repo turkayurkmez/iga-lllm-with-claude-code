@@ -6,6 +6,7 @@ uzunluğa getirilir (benzerlik iç çarpımdır). İndeks yazımı bu modülde y
 başarısız olursa kısmi sonuç dönmez, istisna fırlar. Sistem saati okunmaz.
 """
 
+import json
 import math
 import os
 from dataclasses import dataclass
@@ -15,6 +16,8 @@ from time import sleep
 from dotenv import load_dotenv
 
 ENV_FILE = Path(__file__).resolve().parents[2] / ".env"
+# Sorgu vektörleri indeks klasörünün dışında tutulur (docs/hibrit.md › Önbellek).
+QUERY_CACHE = Path(__file__).resolve().parents[2] / "data" / "sorgu_onbellegi.json"
 
 BATCH_SIZE = 128
 MAX_ATTEMPTS = 5
@@ -114,6 +117,88 @@ def _embed(texts: list[str], input_type: str, client, model: str | None):
     if len({len(v) for v in vectors}) != 1:
         raise EmbedError("Gömme yanıtındaki vektör boyutları tutarsız.")
     return EmbedResult(vectors=vectors, model=model, total_tokens=total_tokens)
+
+
+@dataclass(frozen=True)
+class QueryVectors:
+    """Girdiyle aynı sırada birim vektörler; `fetched` API'ye giden benzersiz sorgu."""
+
+    vectors: list[list[float]]
+    model: str
+    fetched: int
+
+
+def _is_vector(value) -> bool:
+    return isinstance(value, list) and all(
+        isinstance(x, (int, float)) and not isinstance(x, bool) for x in value
+    )
+
+
+def _read_query_cache(path: Path) -> dict[str, dict[str, list[float]]]:
+    """Önbelleği okur; yok, bozuk ya da beklenmedik biçimliyse boş sayılır."""
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    if not isinstance(data, dict):
+        return {}
+    if not all(
+        isinstance(queries, dict) and all(_is_vector(v) for v in queries.values())
+        for queries in data.values()
+    ):
+        return {}
+    return data
+
+
+def _write_query_cache(path: Path, data: dict) -> None:
+    """Geçici dosya + `os.replace`; Windows'ta kısa kilitler için 5 kez dener.
+
+    Yazılamıyorsa sessizce vazgeçilir: önbellek yalnızca hızlandırır.
+    """
+    tmp = path.with_name(path.name + ".tmp")
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+        for attempt in range(MAX_ATTEMPTS):
+            try:
+                os.replace(tmp, path)
+                return
+            except PermissionError:
+                if attempt == MAX_ATTEMPTS - 1:
+                    raise
+                sleep(0.1 * 2**attempt)
+    except OSError:
+        tmp.unlink(missing_ok=True)
+
+
+def embed_queries(
+    texts: list[str],
+    client=None,
+    model: str | None = None,
+    cache_path: Path | str | None = None,
+) -> QueryVectors:
+    """Soruları `input_type="query"` ile gömer; vektörleri diskte önbelleğe alır.
+
+    Anahtar model + sorgu metnidir. Önbellekte olmayan benzersiz sorgular tek
+    istekle (en çok `BATCH_SIZE` başına bir) gömülür; hepsi önbellekteyse istemci
+    kurulmaz. `cache_path` verilmezse `QUERY_CACHE` çağrı anında okunur.
+    """
+    if any(not text.strip() for text in texts):
+        raise ValueError("Soru metni boş olamaz.")
+    model = model if model is not None else _setting("COPILOT_EMBED_MODEL")
+    path = Path(QUERY_CACHE if cache_path is None else cache_path)
+
+    data = _read_query_cache(path)
+    cached = data.get(model, {})
+    missing = [text for text in dict.fromkeys(texts) if text not in cached]
+    if missing:
+        fresh = _embed(missing, "query", client, model).vectors
+        data[model] = {**cached, **dict(zip(missing, fresh, strict=True))}
+        _write_query_cache(path, data)
+        cached = data[model]
+    return QueryVectors(
+        vectors=[cached[text] for text in texts], model=model, fetched=len(missing)
+    )
 
 
 def embed_documents(

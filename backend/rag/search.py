@@ -19,6 +19,21 @@ DEFAULT_K = 5
 METHODS = ("vector", "bm25", "hybrid")
 RRF_CANDIDATES = 20
 RRF_K = 60
+# Kaynak önceliği (docs/hibrit.md): belge `type` değerinden düzey; çarpan
+# `1.00 − 0.03 × (düzey − 1)`. Listede olmayan tür düzey 1 sayılır (çarpan 1.00).
+TYPE_LEVELS = {
+    "aerodrome_restrictions": 2,
+    "aerodrome_manual": 3,
+    "sop": 4,
+    "local_instruction": 4,
+    "temporary_note": 4,
+    "sla_annex": 4,
+    "agreement_summary": 4,
+    "training_material": 5,
+    "operational_memory": 5,
+    "facility_rules": 5,
+}
+PRIORITY_STEP = 0.03
 FILTER_FIELDS = ("status", "language", "type", "doc_id")
 RESULT_FIELDS = ("chunk_id", "doc_id", "revision", "status", "language", "section")
 
@@ -87,6 +102,28 @@ def _fuse(
     )
 
 
+def _prioritize(
+    ranked: list[tuple[float, int]],
+    chunks: list[dict],
+    vector_ranked: list[tuple[float, int]],
+) -> list[tuple[float, int]]:
+    """Skoru tür çarpanıyla çarpar, yeniden sıralar; eşitlik kuralı hibritteki gibi."""
+    vector_rank = {index: rank for rank, (_, index) in enumerate(vector_ranked)}
+
+    def factor(index: int) -> float:
+        level = TYPE_LEVELS.get(chunks[index]["type"], 1)
+        return 1.00 - PRIORITY_STEP * (level - 1)
+
+    return sorted(
+        ((score * factor(index), index) for score, index in ranked),
+        key=lambda pair: (
+            -pair[0],
+            vector_rank.get(pair[1], len(vector_ranked)),
+            chunks[pair[1]]["chunk_id"],
+        ),
+    )
+
+
 def search(
     query: str,
     k: int = DEFAULT_K,
@@ -100,6 +137,7 @@ def search(
     method: str = "vector",
     rrf_candidates: int = RRF_CANDIDATES,
     rrf_k: int = RRF_K,
+    priority: bool = False,
 ) -> list[dict]:
     """En iyi `k` parçayı döndürür: skor azalan, eşitlikte `chunk_id` artan.
 
@@ -107,7 +145,9 @@ def search(
     `COPILOT_EMBED_MODEL` okunur ve indeksin modeliyle karşılaştırılır.
     `method="bm25"`: gömme çağrısı yapmaz, model ve `client` kullanılmaz.
     `"hybrid"`: iki yöntemin ilk `rrf_candidates` adayı RRF ile birleşir
-    (docs/hibrit.md). `index_dir` verilmezse `INDEX_DIR` çağrı anında okunur
+    (docs/hibrit.md). `priority=True` yalnızca `"hybrid"` ile geçerlidir: birleşik
+    skor belge türünün çarpanıyla çarpılır ve liste yeniden sıralanır. `index_dir`
+    verilmezse `INDEX_DIR` çağrı anında okunur
     (testler modül değişkenini değiştirebilsin diye varsayılan burada bağlanmaz).
     """
     if not query.strip():
@@ -121,6 +161,10 @@ def search(
     if method not in METHODS:
         raise ValueError(
             f"Bilinmeyen arama yöntemi '{method}'; geçerli: {', '.join(METHODS)}."
+        )
+    if priority and method != "hybrid":
+        raise ValueError(
+            f"priority yalnızca hybrid yöntemiyle kullanılabilir (yöntem: {method})."
         )
 
     meta, chunks, vectors = _load_index(
@@ -174,6 +218,8 @@ def search(
             rrf_k,
             lambda i: chunks[i]["chunk_id"],
         )
+        if priority:
+            ranked = _prioritize(ranked, chunks, vector_ranked[:rrf_candidates])
     return [
         {
             "score": score,

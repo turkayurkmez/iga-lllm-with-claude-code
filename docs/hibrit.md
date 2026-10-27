@@ -45,7 +45,16 @@ Her iki yöntemden, filtreye uyan ilk 20 aday alınır. Birleşik skor: `score =
 
 ## Kaynak önceliği
 
-`priority` seçeneği yalnızca `hybrid`'de vardır ve varsayılan kapalıdır (`false`); kapalıyken sıralama hiç değişmez. `vector` ya da `bm25` ile açılırsa `ValueError` (HTTP'de 422) olur. Açıkken: `score = birleşik skor × çarpan`, `çarpan = 1.00 − 0.03 × (düzey − 1)`; çarpan uygulandıktan sonra liste yeniden sıralanır. Düzey, belgenin `type` değerinden gelir; aşağıdaki belgelerin hangi düzeyde olduğu sabittir, `type` → düzey eşlemesi korpusun metadata'sına bakılarak yazılır.
+`priority` seçeneği yalnızca `hybrid`'de vardır ve varsayılan kapalıdır (`false`); kapalıyken sıralama hiç değişmez. `vector` ya da `bm25` ile açılırsa `ValueError` (HTTP'de 422, `scripts/rag_ara.py --priority` için `Hata:` ve çıkış kodu 1) olur; gömme çağrısı yapılmaz. `false` her yöntemde kabul edilir. Açıkken: `score = birleşik skor × çarpan`, `çarpan = 1.00 − 0.03 × (düzey − 1)`; çarpan uygulandıktan sonra liste yeniden sıralanır, `k` bu sıralamadan sonra uygulanır. Eşit skorda hibritteki kural sürer (vektör sırası önce, sonra `chunk_id`). Düzey, belgenin `type` değerinden gelir (`backend/rag/search.py › TYPE_LEVELS`):
+
+| `type` | Düzey |
+|---|---|
+| `aerodrome_restrictions` | 2 |
+| `aerodrome_manual` | 3 |
+| `sop`, `local_instruction`, `temporary_note`, `sla_annex`, `agreement_summary` | 4 |
+| `training_material`, `operational_memory`, `facility_rules` | 5 |
+
+Listede olmayan `type` düzey 1 sayılır (çarpan 1.00): yeni bir tür sessizce cezalanmaz ya da öne alınmaz; tabloya eklenene kadar öncelik farkı yoktur.
 
 | Düzey | Çarpan | Belgeler |
 |---|---|---|
@@ -59,7 +68,7 @@ Her iki yöntemden, filtreye uyan ilk 20 aday alınır. Birleşik skor: `score =
 
 ## HTTP
 
-`GET /rag/search` (`docs/rag.md` §7) iki sorgu parametresi alır: `method` (`vector`, `bm25`, `hybrid`; varsayılan `vector`) ve `priority` (`true`/`false`). Geçersiz `method` ya da `hybrid` dışında `priority=true` 422 döner. 200 gövdesine `method` ve `priority` eklenir: `{"query", "k", "method", "priority", "filters", "results"}`. `bm25` gömme çağrısı yapmadığı için `INDEX_MODEL_MISMATCH` ve gömme hatası üretmez; `INDEX_NOT_READY` yine olur.
+`GET /rag/search` (`docs/rag.md` §7) iki sorgu parametresi alır: `method` (`vector`, `bm25`, `hybrid`; varsayılan `vector`) ve `priority` (`true`/`false`). Geçersiz `method` ya da `hybrid` dışında `priority=true` 422 döner. 200 gövdesine `method` ve `priority` eklenir: `{"query", "k", "method", "priority", "filters", "results"}`. M5.1 gövdesi (`vector`) değişmez: `method` yalnızca `vector` dışında, `priority` yalnızca `hybrid` gövdesinde bulunur (`bm25` gövdesinde `method` var, `priority` yok). `bm25` gömme çağrısı yapmadığı için `INDEX_MODEL_MISMATCH` ve gömme hatası üretmez; `INDEX_NOT_READY` yine olur.
 
 ## Ölçüt
 
@@ -72,12 +81,18 @@ Tablo biçimi (`scripts/rag_karsilastir.py` yazar, `eval/out/` altına da kayded
 
 | Yöntem | Kelime | Anlam | Çapraz dil | Öncelik | Tümü | İlk sıra doğru |
 |---|---|---|---|---|---|---|
+| `bm25` | | | | | | |
+| `vector` | | | | | | |
+| `hybrid` | | | | | | |
+| `hybrid + priority` | | | | | | |
 
-Satırlar: `bm25`, `vector`, `hybrid`; `priority` uygulanmışsa `hybrid + priority`. Sütunlar 0.00–1.00 arası recall@5. `rag_karsilastir.py` gerçek Voyage çağrısı yapar (ücretli; önbellek sayesinde aynı sorular tekrar gömülmez), `rag_ara.py` gibi docstring'inde bunu belirtir.
+Satırlar bu dört yöntemdir; `hybrid + priority` satırı `hybrid`'in `priority` açık halidir (`hybrid` satırı kapalı halidir). Değerleri `rag_karsilastir.py` ölçer, belgeye elle yazılmaz. Sütunlar 0.00–1.00 arası recall@5; `Tümü`, tüm soruların ortalamasıdır (tip ortalamalarının ortalaması değil). Tipte soru yoksa hücre `-` olur. `rag_karsilastir.py` gerçek Voyage çağrısı yapar (ücretli), `rag_ara.py` gibi docstring'inde bunu belirtir.
+
+`rag_karsilastir.py` tabloyu stdout'a, gömme özetini ve sonuç yolunu stderr'e yazar; sonuç dosyası (`--out`, varsayılan `eval/out/arama_karsilastirma.json`) `model`, `k`, `satirlar` ve soru başına ilk 5 `chunk_id` (`sonuclar`) içerir. Ücretli istekten önce soru dosyası, `--out` ve indeks (hazır mı, modeli ayarlı modelle aynı mı) denetlenir; biri bozuksa istek yapılmaz. Dört satır da aynı vektörleri kullanır: gömme yalnızca bir kez, önbellekte olmayan sorgular için ve tek istekle yapılır.
 
 ## Önbellek ve istek sayısı
 
-Sorgu vektörleri `data/sorgu_onbellegi.json` içinde, model ve sorgu metni anahtarıyla tutulur. Dosya indeks klasörünün **dışındadır**: arama indeksi değiştirmez ve `build_index` klasörü yerine koyarken önbellek silinmez. `.gitignore`'a eklenir. Yolu `INDEX_DIR`'den bağımsız bir modül değişkenidir, testler tmp'ye yönlendirir. Gömme yalnızca `backend/rag/embed.py`'den çağrılır; önbellek ve toplu sorgu gömme (en çok 128 sorgu bir istekte, `BATCH_SIZE`) orada durur. Önbellekte olmayan sorgular tek istekle gömülür. Dosya zaman damgası taşımaz (`docs/rag.md` §4). Yazma geçici dosya + `os.replace` ile yapılır ve `index.py › _replace` gibi `PermissionError`'da 5 kez yeniden dener (`/rag/search` thread havuzunda çalışır). Önbellek bozuksa ya da okunamıyorsa yok sayılır ve sorgu yeniden gömülür; yazılamıyorsa arama yine de sonuç döner. Testler ağa çıkmaz, `.env`'e ihtiyaç duymaz.
+Sorgu vektörleri `data/sorgu_onbellegi.json` içinde, model ve sorgu metni anahtarıyla tutulur. Dosya indeks klasörünün **dışındadır**: arama indeksi değiştirmez ve `build_index` klasörü yerine koyarken önbellek silinmez. `.gitignore`'a eklenir. Yolu `INDEX_DIR`'den bağımsız bir modül değişkenidir, testler tmp'ye yönlendirir. Gömme yalnızca `backend/rag/embed.py`'den çağrılır; önbellek ve toplu sorgu gömme (en çok 128 sorgu bir istekte, `BATCH_SIZE`) orada durur. Önbellekte olmayan sorgular tek istekle gömülür: `embed.embed_queries(texts, client=None, model=None, cache_path=None)` benzersiz sorguları dedupe eder, yalnızca eksikleri gönderir (`QueryVectors.fetched` kaç sorgunun gittiğini söyler), hepsi önbellekteyse istemci kurmaz. Dosya biçimi `{model: {sorgu: [vektör]}}`; `embed_query` (tek soru, `search()` yolu) önbelleği kullanmaz, `rag_karsilastir.py` kullanır. Dosya zaman damgası taşımaz (`docs/rag.md` §4). Yazma geçici dosya + `os.replace` ile yapılır ve `index.py › _replace` gibi `PermissionError`'da 5 kez yeniden dener (`/rag/search` thread havuzunda çalışır). Önbellek bozuksa ya da okunamıyorsa yok sayılır ve sorgu yeniden gömülür; yazılamıyorsa arama yine de sonuç döner. Testler ağa çıkmaz, `.env`'e ihtiyaç duymaz.
 
 ## Kapsam dışı (bu modülde)
 

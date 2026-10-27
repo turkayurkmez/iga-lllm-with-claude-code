@@ -432,12 +432,18 @@ def rag_search_endpoint(
     type: str | None = None,
     doc_id: str | None = None,
     method: Literal["vector", "bm25", "hybrid"] = "vector",
+    priority: bool = False,
 ) -> Response:
     """İndekste arama (docs/rag.md §7, docs/hibrit.md); zarf değildir.
 
-    `method` yalnızca `vector` dışında gövdeye girer: M5.1 gövdesi (`list(body)`)
-    `priority` gelene kadar değişmez. `bm25` gömme ayarı istemez.
+    `method` yalnızca `vector` dışında, `priority` yalnızca `hybrid` gövdesine girer:
+    M5.1 gövdesi (`list(body)`) değişmez. `priority=true` `hybrid` dışında 422.
+    `bm25` gömme ayarı istemez.
     """
+    if priority and method != "hybrid":
+        return json_response(
+            {"detail": "priority yalnızca method=hybrid ile kullanılabilir."}, 422
+        )
     # Senkron: gömme isteği ve indeks okuması FastAPI'nin thread havuzunda çalışır.
     filters = {
         name: value
@@ -450,7 +456,9 @@ def rag_search_endpoint(
         if value is not None
     }
     try:
-        results = rag_search.search(q, k=k, method=method, **filters)
+        results = rag_search.search(
+            q, k=k, method=method, priority=priority, **filters
+        )
     except rag_search.IndexNotReadyError as exc:
         logger.warning("Arama indeksi hazır değil: %s", exc)
         message, code = INDEX_NOT_READY_MESSAGE, exc.code
@@ -462,7 +470,9 @@ def rag_search_endpoint(
         return json_response({"detail": SEARCH_UNAVAILABLE_MESSAGE}, 503)
     else:
         body = {"query": q, "k": k, "filters": filters, "results": results}
-        if method != "vector":
+        if method == "hybrid":
+            body = {"query": q, "k": k, "method": method, "priority": priority, **body}
+        elif method != "vector":
             body = {"query": q, "k": k, "method": method, **body}
         return json_response(body, 200)
     return json_response({"error": {"code": code, "message": message}}, 503)

@@ -7,6 +7,7 @@ yapar (ücretli, soru başına tek istek); `bm25` gömme yapmaz, `.env` istemez.
 Kullanım (repo kökünden):
     $env:PYTHONIOENCODING="utf-8"; python scripts/rag_ara.py "pist kapanış prosedürü"
     python scripts/rag_ara.py "TK2345 gecikme" --method bm25
+    python scripts/rag_ara.py "soru" --method hybrid --priority
     python scripts/rag_ara.py "soru" -k 3 --status active --language tr
     python scripts/rag_ara.py "soru" --type procedure --doc-id D05
 """
@@ -42,6 +43,11 @@ def main(argv: list[str] | None = None) -> int:
         default="vector",
         help="Arama yöntemi; bm25 gömme (Voyage) ayarı istemez.",
     )
+    parser.add_argument(
+        "--priority",
+        action="store_true",
+        help="Kaynak önceliği (docs/hibrit.md); yalnızca --method hybrid ile.",
+    )
     parser.add_argument("--indeks", default=str(INDEX_DIR), help="İndeks klasörü.")
     args = parser.parse_args(argv)
 
@@ -54,6 +60,7 @@ def main(argv: list[str] | None = None) -> int:
             type=args.type,
             doc_id=args.doc_id,
             method=args.method,
+            priority=args.priority,
             index_dir=args.indeks,
         )
     except (
