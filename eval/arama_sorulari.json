@@ -1,0 +1,14 @@
+[
+  {"id": "K1", "soru": "holdover süresi tablosu", "tip": "kelime", "beklenen_belge": ["D04"]},
+  {"id": "K2", "soru": "PBB arızası", "tip": "kelime", "beklenen_belge": ["D05"]},
+  {"id": "K3", "soru": "Kategori E stand", "tip": "kelime", "beklenen_belge": ["D01"]},
+  {"id": "A1", "soru": "Buzlanma önleme sıvısı uygulandıktan sonra uçak ne kadar bekleyebilir?", "tip": "anlam", "beklenen_belge": ["D04"]},
+  {"id": "A2", "soru": "Köprü çalışmıyorsa yolcular uçağa nasıl bindirilir?", "tip": "anlam", "beklenen_belge": ["D05"]},
+  {"id": "A3", "soru": "Gece uçuşlarına getirilen ses sınırlaması ne zaman başlıyor?", "tip": "anlam", "beklenen_belge": ["D08"]},
+  {"id": "C1", "soru": "How do I proceed when the passenger boarding bridge fails?", "tip": "capraz_dil", "beklenen_belge": ["D05"]},
+  {"id": "C2", "soru": "How are aircraft assigned to parking positions?", "tip": "capraz_dil", "beklenen_belge": ["D01"]},
+  {"id": "C3", "soru": "Yer hizmetleri sözleşmesi hangi hizmetleri kapsıyor?", "tip": "capraz_dil", "beklenen_belge": ["D12"]},
+  {"id": "O1", "soru": "A stand'ına kod E uçağı park edebilir mi?", "tip": "oncelik", "beklenen_belge": ["D01", "D07"], "ilk_beklenen": "D07"},
+  {"id": "O2", "soru": "Düşük görüşte operasyon nasıl yürütülür?", "tip": "oncelik", "beklenen_belge": ["D03"], "ilk_beklenen": "D03"},
+  {"id": "O3", "soru": "Düşük görüşte yeni prosedürde ne değişti?", "tip": "oncelik", "beklenen_belge": ["D03"], "ilk_beklenen": "D03"}
+]
