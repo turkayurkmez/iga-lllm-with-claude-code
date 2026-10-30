@@ -38,6 +38,8 @@ Alan sırası tablodaki gibidir. Bütün alanlar her satırda bulunur; anlamı o
 | `tool_calls` | liste | Aşağıdaki öğelerden oluşur; `AgentResult.turns[].tool_calls[]` sırasıyla, `executed: false` olanlar dahil. Tool çağrısı yoksa ya da `model_error`'da `[]`. |
 | `chips` | liste | Döngünün ürettiği `source_chip` olaylarının `data`'sı (`tool`, `source`, `as_of`, `stale`, `error_code`), üretildiği sırayla ve olduğu gibi (`docs/chat.md` › Kod garantileri 3'teki tekilleştirmeyle). İstemci akışı kesmiş olsa da döngünün ürettiği çiplerin hepsi. Çip yoksa `[]`. `kpi_card` ve `selection_card` kayda girmez (`value` taşırlar). |
 | `client_disconnected` | mantıksal | İstemci akış bitmeden bağlantıyı kestiyse `true`: son olay (`done` ya da `error`) istemciye iletilemedi. Akış sonuna kadar iletildiyse `false`. |
+| `injection_flags` | liste | Şüphe işaretleri (`docs/enjeksiyon.md` E6): `message:<kod>` (mesajda `backend/injection.py` › `FINDINGS` eşleşmesi; istek reddedilmez), `unverified_numbers`, `instruction_leak` (yalnızca `tamam`), `tekrar_siniri`. Bulgu yoksa `[]`. Bu alan eklenmeden önceki satırlarda yoktur; okuyan kod `record.get("injection_flags")` kullanır. |
+| `unverified_numbers` | liste | Cevapta olup soruda ya da bu koşunun tool `value`'larında bulunmayan sayı/saat simgeleri (yalnızca `tamam`; yoksa `[]`). Eski satırlarda yoktur. |
 
 `tool_calls` öğesi:
 
@@ -123,13 +125,15 @@ Gövde `{"audit_id": "..."}`; ek alan reddedilir.
    "tool_version": "1.0.0", "author": "tool", "error_code": null}],
  "chips": [{"tool": "get_flight_summary", "source": "data/referans/seed42-2026-10-20.json",
    "as_of": "2026-10-20T16:22:00+03:00", "stale": false, "error_code": null}],
- "client_disconnected": false}
+ "client_disconnected": false, "injection_flags": [], "unverified_numbers": []}
 {"type": "feedback", "audit_id": "3f9c2a7e4b1d4c8e9a0f6b2d7e5c1a3b", "ts": "2026-10-20T16:23:10+03:00", "rating": "down"}
 ```
 
 Satırda `600`, `4`, `115` yalnızca modelin cevap metninde (`answer`) geçer; zarfın `value`'su yoktur.
 
 ## Okuma scripti
+
+`--isaretli` bayrağı `injection_flags` dolu soruları en yeniden eskiye listeler; hiç yoksa `İşaretli kayıt yok.` yazar.
 
 `scripts/audit_report.py` kayıtları salt okur; dosyaları değiştirmez, modele ya da API'ye gitmez. Klasör `backend.audit.audit_dir()`'dir (`COPILOT_AUDIT_DIR`, boşsa `logs/audit`). Çıktı Türkçe düz metindir; `PYTHONIOENCODING=utf-8` ile çalıştırılır. Testleri `tests/test_audit_report.py`.
 

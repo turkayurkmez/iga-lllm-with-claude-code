@@ -125,3 +125,39 @@ def filter_chunks(
         else:
             kept.append(chunk)
     return kept, quarantined
+
+
+# --- Çıktı denetimi ve mesaj işaretleri (docs/enjeksiyon.md E5, E6) ----------------
+
+NUMBER = re.compile(r"\d+(?::\d{2})?")
+CITATION_TAG = re.compile(r"\[D\d{2}#\d{2,}\]")
+SENTENCE_END = re.compile(r"(?<=[.!?])\s+")
+MIN_LEAK_CHARS = 40
+
+
+def unverified_numbers(answer: str, question: str, envelopes: list[dict]) -> list[str]:
+    """Cevaptaki, soruda ya da tool `value`'larında bulunmayan sayı ve saatler.
+
+    Bilinçli gevşektir: yalnızca simge eşlemesi yapar (`14:05` ISO damgadaki saatle,
+    `37` bir rakam dizisiyle eşleşir); biçim farkları ve hesap kapsam dışıdır.
+    """
+    allowed = set(NUMBER.findall(question))
+    for envelope in envelopes:
+        allowed |= set(NUMBER.findall(json.dumps(envelope.get("value"), ensure_ascii=False)))
+    found = set(NUMBER.findall(CITATION_TAG.sub("", answer)))
+    return sorted(found - allowed)
+
+
+def leaks_instruction(answer: str, system_text: str) -> bool:
+    """Talimatın en az 40 karakterlik bir cümlesi cevapta aynen geçiyorsa True."""
+    normalized_answer = " ".join(answer.split())
+    sentences = SENTENCE_END.split(" ".join(system_text.split()))
+    return any(
+        len(sentence) >= MIN_LEAK_CHARS and sentence in normalized_answer
+        for sentence in sentences
+    )
+
+
+def message_flags(message: str) -> list[str]:
+    """Kullanıcı mesajındaki bulgular, `message:<kod>` biçiminde; isteği reddetmez."""
+    return [f"message:{code}" for code in scan_text(message)]
