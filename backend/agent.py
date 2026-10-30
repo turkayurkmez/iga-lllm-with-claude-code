@@ -15,6 +15,7 @@ from pydantic import BaseModel
 
 from backend import injection, instructions
 from backend.envelope import ErrorCode
+from backend.session import HistoryTurn, render_history
 from backend.tools import run_tool, tool_definitions
 
 MAX_TURNS = 8
@@ -116,10 +117,13 @@ def run_agent(
     question: str,
     client: Any = None,
     instruction_version: str | None = None,
+    history: list[HistoryTurn] | None = None,
 ) -> AgentResult:
     """Soruyu agent döngüsünden geçirir; API ve ayar hataları çağırana fırlar.
 
     instruction_version verilmezse COPILOT_INSTRUCTION (boşsa v3) kullanılır.
+    history, sunucunun kendi sakladığı önceki turlardır (backend.session); soru
+    bu turlardan sonra gelir. Yoksa ya da boşsa istek geçmişsiz davranışla aynıdır.
     """
     if not question.strip():
         raise ValueError("Soru boş olamaz.")
@@ -148,7 +152,10 @@ def run_agent(
         "tools": tool_definitions(),
         "max_tokens": MAX_TOKENS,
     }
-    messages: list[dict] = [{"role": "user", "content": question}]
+    messages: list[dict] = [
+        *render_history(history or []),
+        {"role": "user", "content": question},
+    ]
     requested: Counter[tuple[str, str]] = Counter()
     turns: list[Turn] = []
 
