@@ -132,7 +132,9 @@ def test_run_tool_kosudan_sonra_geri_alinir():
     script = load_script()
     original = agent.run_tool
 
-    script.run_attacks(Responder("Veri yok.", tool="search_documents"), "v3", [POISONED])
+    script.run_attacks(
+        Responder("Veri yok.", tool="search_documents"), "v3", [POISONED]
+    )
 
     assert agent.run_tool is original
 
@@ -161,7 +163,9 @@ def test_gecersiz_surum_hata_ve_1(tmp_path, capsys):
     script = load_script()
     out = tmp_path / "cikti.json"
 
-    code = script.main(["--instruction", "v9", "--out", str(out)], client=Responder("x"))
+    code = script.main(
+        ["--instruction", "v9", "--out", str(out)], client=Responder("x")
+    )
 
     assert code == 1
     assert capsys.readouterr().err.startswith("Hata:")

@@ -157,7 +157,7 @@ def test_bozuk_istisna_dosyasi_turkce_hata_verir(tmp_path, content):
     path = tmp_path / "istisna.json"
     path.write_text(content, encoding="utf-8")
 
-    with pytest.raises(ValueError, match="İstisna"):
+    with pytest.raises((ValueError, TypeError), match="İstisna"):
         load().load_exceptions(path)
 
 

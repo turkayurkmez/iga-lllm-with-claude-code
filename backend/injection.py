@@ -94,7 +94,7 @@ def load_exceptions(path: Path | str = EXCEPTIONS_FILE) -> set[tuple[str, str]]:
     except (OSError, ValueError) as exc:
         raise ValueError(f"İstisna dosyası okunamadı: {path.name}") from exc
     if not isinstance(records, list):
-        raise ValueError("İstisna dosyası bir liste olmalı.")
+        raise TypeError("İstisna dosyası bir liste olmalı.")
     exceptions = set()
     for record in records:
         fields = ("chunk_id", "code", "reason")
@@ -144,7 +144,9 @@ def unverified_numbers(answer: str, question: str, envelopes: list[dict]) -> lis
     """
     allowed = set(NUMBER.findall(question))
     for envelope in envelopes:
-        allowed |= set(NUMBER.findall(json.dumps(envelope.get("value"), ensure_ascii=False)))
+        allowed |= set(
+            NUMBER.findall(json.dumps(envelope.get("value"), ensure_ascii=False))
+        )
     found = set(NUMBER.findall(CITATION_TAG.sub("", answer)))
     return sorted(found - allowed)
 

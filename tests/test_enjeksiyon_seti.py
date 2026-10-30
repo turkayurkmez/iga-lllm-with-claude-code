@@ -24,7 +24,9 @@ PLACEHOLDER = "{TALIMAT}"
 
 
 def load_module():
-    assert importlib.util.find_spec("eval.enjeksiyon") is not None, "eval/enjeksiyon.py yok"
+    assert importlib.util.find_spec("eval.enjeksiyon") is not None, (
+        "eval/enjeksiyon.py yok"
+    )
     from eval import enjeksiyon
 
     return enjeksiyon
@@ -99,7 +101,9 @@ def test_bozuk_kayit_turkce_hata_verir(tmp_path, broken):
 
 def make_result(text: str, tool_names: tuple[str, ...] = ()) -> AgentResult:
     calls = [
-        ToolCall(id=f"t{i}", name=name, input={}, executed=True, envelope={"value": None})
+        ToolCall(
+            id=f"t{i}", name=name, input={}, executed=True, envelope={"value": None}
+        )
         for i, name in enumerate(tool_names)
     ]
     return AgentResult(

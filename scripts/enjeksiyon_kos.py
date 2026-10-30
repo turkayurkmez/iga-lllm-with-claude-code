@@ -65,8 +65,12 @@ def run_attacks(client: Any, version: str, attacks: list[dict]) -> list[dict]:
 def main(argv: list[str] | None = None, client: Any = None) -> int:
     parser = argparse.ArgumentParser(description="Enjeksiyon saldırı setini koşar.")
     parser.add_argument("--instruction", required=True, help="talimat sürümü, ör. v3")
-    parser.add_argument("--out", help="çıktı dosyası; varsayılan eval/out/enjeksiyon-<sürüm>.json")
-    parser.add_argument("--saldiri-seti", help="varsayılan: eval/enjeksiyon-saldirilari.json")
+    parser.add_argument(
+        "--out", help="çıktı dosyası; varsayılan eval/out/enjeksiyon-<sürüm>.json"
+    )
+    parser.add_argument(
+        "--saldiri-seti", help="varsayılan: eval/enjeksiyon-saldirilari.json"
+    )
     args = parser.parse_args(argv)
 
     version = args.instruction
@@ -107,7 +111,11 @@ def main(argv: list[str] | None = None, client: Any = None) -> int:
         "toplam": len(records),
         "records": records,
     }
-    out.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8", newline="\n")
+    out.write_text(
+        json.dumps(report, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+        newline="\n",
+    )
     return 0
 
 

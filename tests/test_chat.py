@@ -580,7 +580,9 @@ def test_mesaj_siniri_asilinca_422():
     )
 
     assert response.status_code == 422
-    assert str(main.MAX_MESSAGE_CHARS) in json.dumps(response.json(), ensure_ascii=False)
+    assert str(main.MAX_MESSAGE_CHARS) in json.dumps(
+        response.json(), ensure_ascii=False
+    )
 
 
 def test_sinir_kod_noktasiyla_sayilir(chat):
