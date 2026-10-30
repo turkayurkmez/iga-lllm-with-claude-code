@@ -47,7 +47,7 @@ def test_varsayilan_yukleme_v3_dosyasini_doner():
     assert instructions().load() == expected
 
 
-@pytest.mark.parametrize("name", ["v1", "v2", "v3"])
+@pytest.mark.parametrize("name", ["v1", "v2", "v3", "v4"])
 def test_surum_verilince_o_dosya_yuklenir(name):
     expected = (INSTRUCTIONS_DIR / f"{name}.md").read_text(encoding="utf-8")
 
@@ -79,7 +79,7 @@ def test_kayitli_surumler_semver_bicimli():
         assert name == f"v{major}", f"{name} dosyası {version} sürümünü taşıyamaz."
 
 
-@pytest.mark.parametrize("name", ["v1", "v2", "v3"])
+@pytest.mark.parametrize("name", ["v1", "v2", "v3", "v4"])
 def test_surum_dosyasi_kirk_satiri_asmaz(name):
     lines = (INSTRUCTIONS_DIR / f"{name}.md").read_text(encoding="utf-8").splitlines()
 

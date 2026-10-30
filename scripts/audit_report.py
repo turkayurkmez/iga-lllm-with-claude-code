@@ -4,6 +4,7 @@
 - --id: bir sorunun yolculuğu (soru → tool çağrıları → çipler → cevap → geri bildirim).
   Kimlik tam audit_id ya da en az 6 karakterlik benzersiz önekidir.
 - --tarih: o günün bütün soruları, thumbs down alanlar önce; soru → cevap → geri bildirim.
+- --isaretli: `injection_flags` dolu sorular, en yeniden eskiye (docs/enjeksiyon.md E6).
 
 Kayıtları yalnızca okur; model ya da API çağrısı yapmaz. Klasör COPILOT_AUDIT_DIR,
 boşsa logs/audit. Repo kökünden çalıştırın:
@@ -27,6 +28,7 @@ MIN_PREFIX = 6
 ID_PATTERN = re.compile(r"^[0-9a-f]+$")
 DATE_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 NO_RECORDS = "Kayıt yok."
+NO_FLAGGED = "İşaretli kayıt yok."
 NO_ANSWER = "(cevap yok)"
 
 
@@ -199,12 +201,25 @@ def parse_day(value: str) -> str:
     return value
 
 
+def flagged(questions: list[dict], negatives: dict[str, list[str]]) -> list[str]:
+    """İşaretli soruların özet satırları; eski satırlarda alan yoktur (get)."""
+    newest = sorted(questions, key=moment, reverse=True)
+    lines = [
+        f"{summary_line(q, negatives)}  [işaret: {', '.join(q['injection_flags'])}]"
+        for q in newest
+        if q.get("injection_flags")
+    ]
+    return lines or [NO_FLAGGED]
+
+
 def report(args: argparse.Namespace) -> list[str]:
     day = None if args.tarih is None else parse_day(args.tarih)
     pairs, feedbacks = read_records(audit.audit_dir())
     negatives = feedback_index(feedbacks)
     questions = [record for _, record in pairs]
 
+    if args.isaretli:
+        return flagged(questions, negatives)
     if args.id is not None:
         return journey(find(questions, args.id), negatives)
     if day is not None:
@@ -224,6 +239,9 @@ def main(argv: list[str] | None = None) -> int:
     group = parser.add_mutually_exclusive_group()
     group.add_argument("--id", help="audit_id ya da en az 6 karakterlik öneki")
     group.add_argument("--tarih", help="YYYY-MM-DD; o günün soruları")
+    group.add_argument(
+        "--isaretli", action="store_true", help="injection_flags dolu soruları listeler"
+    )
     args = parser.parse_args(argv)
     try:
         lines = report(args)

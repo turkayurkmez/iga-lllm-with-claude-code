@@ -11,7 +11,7 @@ import threading
 import uuid
 from pathlib import Path
 
-from backend import clock
+from backend import clock, injection, instructions
 from backend.agent import AgentResult
 
 ENV_VAR = "COPILOT_AUDIT_DIR"
@@ -68,6 +68,33 @@ def tool_calls(result: AgentResult | None) -> list[dict]:
     return calls
 
 
+def injection_fields(
+    question: str, status: str, result: AgentResult | None
+) -> tuple[list[str], list[str]]:
+    """(injection_flags, unverified_numbers); docs/enjeksiyon.md E5, E6.
+
+    Cevap denetimleri yalnızca cevap kayda girdiğinde (`tamam`) çalışır.
+    """
+    flags = injection.message_flags(question)
+    numbers: list[str] = []
+    if status == "tamam" and result is not None:
+        envelopes = [
+            call.envelope
+            for turn in result.turns
+            for call in turn.tool_calls
+            if call.envelope
+        ]
+        numbers = injection.unverified_numbers(result.text, question, envelopes)
+        if numbers:
+            flags.append("unverified_numbers")
+        system = instructions.load(result.instruction.name)
+        if injection.leaks_instruction(result.text, system):
+            flags.append("instruction_leak")
+    if status == "tekrar_siniri":
+        flags.append("tekrar_siniri")
+    return flags, numbers
+
+
 def write_question(
     question: str,
     *,
@@ -84,6 +111,7 @@ def write_question(
 
     chips akışın source_chip verileridir; value taşımadıkları için olduğu gibi girer.
     """
+    flags, numbers = injection_fields(question, status, result)
     append(
         {
             "type": "question",
@@ -100,6 +128,8 @@ def write_question(
             "tool_calls": tool_calls(result),
             "chips": chips,
             "client_disconnected": client_disconnected,
+            "injection_flags": flags,
+            "unverified_numbers": numbers,
         }
     )
 

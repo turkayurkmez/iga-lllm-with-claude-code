@@ -550,7 +550,8 @@ def test_text_delta_birlesimi_etiketli_cevaptir(chat):
 
 
 def test_zarf_modele_citationdan_etkilenmeden_gider(chat):
-    # Arama zarfı modele değiştirilmeden gider; citation yalnızca akışa eklenir.
+    # Modele giden içerik yalnızca belge sınırlandırmasıyla (E1) zarftan ayrılır;
+    # citation modele giden metni etkilemez, yalnızca akışa eklenir.
     envelope = search_envelope([D03])
     llm = importlib.import_module("backend.llm")
 
@@ -560,4 +561,8 @@ def test_zarf_modele_citationdan_etkilenmeden_gider(chat):
 
     assert of_type(events, "citation") == [verified(D03)]
     result = llm.client.requests[1]["messages"][-1]["content"][0]
-    assert json.loads(result["content"]) == envelope
+    from backend import injection
+
+    assert result["content"] == injection.render_tool_result(
+        "search_documents", envelope
+    )

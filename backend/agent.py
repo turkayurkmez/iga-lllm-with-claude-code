@@ -13,7 +13,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel
 
-from backend import instructions
+from backend import injection, instructions
 from backend.envelope import ErrorCode
 from backend.tools import run_tool, tool_definitions
 
@@ -106,7 +106,8 @@ def _execute(call: ToolCall) -> dict:
     return {
         "type": "tool_result",
         "tool_use_id": call.id,
-        "content": json.dumps(envelope, ensure_ascii=False),
+        # Model girdisi güvenilmez metni sınırlar; kayıtlı zarf ham kalır (docs/enjeksiyon.md E1).
+        "content": injection.render_tool_result(call.name, envelope),
         "is_error": is_error,
     }
 

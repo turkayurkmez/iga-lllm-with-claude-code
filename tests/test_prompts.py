@@ -16,7 +16,7 @@ import pytest
 from anthropic.types import Message, TextBlock, Usage
 from fastapi.testclient import TestClient
 
-from backend import main, prompts
+from backend import instructions, main, prompts
 from backend.envelope import ErrorCode
 from backend.tools import tool_definitions
 
@@ -45,8 +45,8 @@ OPERATIONAL_PATTERNS = {
 }
 
 
-def changelog_last_version() -> str:
-    """Belgenin Değişiklik günlüğü tablosundaki son satırın sürüm hücresi."""
+def changelog_versions() -> list[str]:
+    """Belgenin Değişiklik günlüğü tablosundaki tüm sürüm hücreleri, sırasıyla."""
     text = CONTRACT.read_text(encoding="utf-8")
     _, _, section = text.partition("## Değişiklik günlüğü")
     assert section, "docs/system-talimat.md içinde Değişiklik günlüğü bölümü yok."
@@ -57,7 +57,7 @@ def changelog_last_version() -> str:
     ]
     # İlk satır başlıktır.
     assert len(rows) >= 2, "Değişiklik günlüğünde satır yok."
-    return rows[-1].split("|")[1].strip().strip("`")
+    return [row.split("|")[1].strip().strip("`") for row in rows[1:]]
 
 
 class FakeMessages:
@@ -125,7 +125,10 @@ def test_surum_degisiklik_gunlugunde_var():
     version = getattr(prompts, "SYSTEM_INSTRUCTIONS_VERSION", None)
 
     assert isinstance(version, str), "SYSTEM_INSTRUCTIONS_VERSION tanımlı değil."
-    assert changelog_last_version() == version
+    # Etkin sürüm günlükte vardır ve her kayıtlı sürümün satırı bulunur (varsayılan
+    # olmayan v4 gibi sürümler günlüğün sonunda olabilir).
+    assert version in changelog_versions()
+    assert set(instructions.VERSIONS.values()) <= set(changelog_versions())
 
 
 def test_talimat_turkce_ve_tek_parca():
