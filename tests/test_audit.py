@@ -785,7 +785,15 @@ def test_audit_akisa_yalnizca_done_audit_id_ekler(chat, audit_dir):
         "done",
     ]
     done = of_type(events, "done")[0]
-    assert list(done) == ["status", "reason", "turns", "instruction", "audit_id"]
+    assert list(done) == [
+        "status",
+        "reason",
+        "turns",
+        "instruction",
+        "audit_id",
+        "session_id",
+        "session_reset",
+    ]
     assert done["audit_id"] == only_question(audit_dir)["audit_id"]
     # Diğer olaylarda audit alanı yok.
     others = [data for name, data in events if name != "done"]
@@ -968,6 +976,41 @@ def test_istemci_akisi_keserse_de_tek_satir_yazilir(
             "as_of": NOW,
             "stale": False,
             "error_code": None,
+        }
+    ]
+
+
+def test_istemci_akisi_keserse_de_tur_oturum_gecmisine_eklenir(
+    llm, audit_dir, monkeypatch
+):
+    from backend import session
+
+    store = session.SessionStore()
+    monkeypatch.setattr(session, "STORE", store)
+    release = threading.Event()
+    monkeypatch.setattr(
+        llm,
+        "client",
+        BlockingClient([turn(1, "tool_use", SUMMARY_ALL), answer(2)], release),
+    )
+
+    async def scenario() -> None:
+        _, cut = await drive_chat(spec_version="2.4", cut_after="source_chip")
+        assert cut
+        release.set()
+        await wait_for_lines(day_file(audit_dir))
+
+    try:
+        asyncio.run(scenario())
+    finally:
+        release.set()
+
+    (session_id,) = store._sessions
+    assert store.history(session_id) == [
+        {
+            "question": QUESTION,
+            "answer": ANSWER,
+            "tool_calls": [{"name": SUMMARY_ALL[0], "input": SUMMARY_ALL[1]}],
         }
     ]
 

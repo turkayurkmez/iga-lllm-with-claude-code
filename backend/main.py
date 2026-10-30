@@ -26,10 +26,12 @@ from pydantic import (
 from starlette.concurrency import run_in_threadpool
 
 from backend import audit, instructions, live
+from backend import session as sessions
 from backend.agent import run_agent
 from backend.cards import CardBuilder
 from backend.rag import search as rag_search
 from backend.rag.embed import EmbedConfigError, EmbedError
+from backend.session import SESSION_ID_PATTERN, Begin, HistoryTurn
 from backend.tools import run_tool, tool_definitions
 from backend.tools._ortak import DataError, load_data
 from backend.tools.harita import ID_PATTERNS, exists
@@ -127,8 +129,13 @@ MAX_MESSAGE_CHARS = 2000
 
 
 class ChatRequest(BaseModel):
+    # İstemci geçmiş gönderemez: fazla alan (ör. history) reddedilir.
+    model_config = ConfigDict(extra="forbid")
+
     message: str
     selected: Selected | None = None
+    # Sunucunun verdiği oturum kimliği; yoksa ya da bilinmiyorsa yeni oturum açılır.
+    session_id: str | None = Field(default=None, pattern=SESSION_ID_PATTERN)
 
     @field_validator("selected", mode="before")
     @classmethod
@@ -205,7 +212,15 @@ class EventingClient:
 
 
 def run_chat(
-    llm: ModuleType, message: str, version: str, emit: Emit, audit_id: str
+    llm: ModuleType,
+    message: str,
+    version: str,
+    emit: Emit,
+    audit_id: str,
+    *,
+    history: list[HistoryTurn] | None = None,
+    session_id: str | None = None,
+    session_reset: bool = False,
 ) -> dict:
     """Döngüyü çalıştırır ve olayları emit'e verir; thread havuzunda çalışır.
 
@@ -214,7 +229,9 @@ def run_chat(
     """
     client = EventingClient(llm.client, emit)
     try:
-        result = run_agent(message, client=client, instruction_version=version)
+        result = run_agent(
+            message, client=client, instruction_version=version, history=history
+        )
     except Exception as exc:
         if isinstance(exc, anthropic.APIError):
             logger.exception("Claude çağrısı başarısız oldu")
@@ -249,6 +266,8 @@ def run_chat(
             "turns": len(result.turns),
             "instruction": result.instruction.model_dump(),
             "audit_id": audit_id,
+            "session_id": session_id,
+            "session_reset": session_reset,
         },
     )
     return {
@@ -268,9 +287,17 @@ class ChatStream:
     """
 
     def __init__(
-        self, llm: ModuleType, message: str, version: str, prompt: str | None = None
+        self,
+        llm: ModuleType,
+        message: str,
+        version: str,
+        prompt: str | None = None,
+        session: Begin | None = None,
+        history: list[HistoryTurn] | None = None,
     ):
         self._llm = llm
+        self._session = session
+        self._history = history
         # Audit orijinal mesajı, model not eklenmiş metni alır.
         self._message = message
         self._prompt = message if prompt is None else prompt
@@ -294,7 +321,16 @@ class ChatStream:
         def work() -> None:
             try:
                 self._outcome = run_chat(
-                    self._llm, self._prompt, self._version, emit, self.audit_id
+                    self._llm,
+                    self._prompt,
+                    self._version,
+                    emit,
+                    self.audit_id,
+                    history=self._history,
+                    session_id=None
+                    if self._session is None
+                    else self._session.session_id,
+                    session_reset=self._session is not None and self._session.reset,
                 )
             finally:
                 loop.call_soon_threadsafe(queue.put_nowait, None)
@@ -316,11 +352,32 @@ class ChatStream:
                 lambda _: self._record(client_disconnected=True)
             )
 
+    def _remember(self) -> None:
+        """Tamamlanan (tamam) turu oturum geçmişine ekler; diğer turlar girmez."""
+        result = None if self._outcome is None else self._outcome.get("result")
+        if self._session is None or result is None or result.status != "tamam":
+            return
+        sessions.STORE.add(
+            self._session.session_id,
+            {
+                # Orijinal mesaj: haritadan seçim notu geçmişe girmez.
+                "question": self._message,
+                "answer": result.text,
+                "tool_calls": [
+                    {"name": call.name, "input": call.input}
+                    for turn in result.turns
+                    for call in turn.tool_calls
+                    if call.executed
+                ],
+            },
+        )
+
     def _record(self, *, client_disconnected: bool) -> None:
         # Yazım hatası akışı etkilemez; ayrıntı yalnızca sunucu loguna yazılır.
         try:
             if self._outcome is None:
                 raise RuntimeError("Döngü sonuç üretmeden bitti.")
+            self._remember()
             audit.write_question(
                 self._message,
                 audit_id=self.audit_id,
@@ -579,5 +636,11 @@ async def chat(request: ChatRequest) -> StreamingResponse:
         logger.exception("Talimat sürümü yüklenemedi")
         raise HTTPException(status_code=503, detail=CONFIG_ERROR_MESSAGE) from None
 
+    # Oturum ayar denetimlerinden sonra açılır; 503 yolları oturum bırakmaz.
+    session = sessions.STORE.begin(request.session_id)
+    history = sessions.STORE.history(session.session_id)
+
     # text/event-stream için Starlette charset=utf-8'i başlığa kendisi ekler.
-    return ChatResponse(ChatStream(llm, request.message, version, prompt))
+    return ChatResponse(
+        ChatStream(llm, request.message, version, prompt, session, history)
+    )
