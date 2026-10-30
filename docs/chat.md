@@ -37,6 +37,7 @@ Alan adları `AgentResult` ile aynıdır (`docs/agent.md` › Sonuç). Tablo kap
 | `selection_card` | Zarf `AMBIGUOUS_ENTITY` ise | `{"query": "...", "message": "...", "candidates": [<aday>, ...], "source": "...", "as_of": "..."}` |
 | `map_command` | `focus_map_object` ya da `highlight_map_set` zarfında `error` `null` ise (`docs/harita.md` › `map_command` olayı) | Zarfın `value`'su olduğu gibi: `{"command": "...", "object_type": "...", "id": "..."}` ya da `{"command": "...", "object_type": "...", "ids": ["..."]}` |
 | `text_delta` | Döngü `tamam` ile bitince, nihai cevabın metni | `{"text": "..."}` |
+| `citation` | Döngü `tamam` ile bitince, nihai cevapta geçen her ayrık parça etiketi için (Atıf olayı) | Eşleşen etiket: `{"chunk_id": "...", "dogrulandi": true, "title": "...", "section": "...", "revision": "...", "effective_from": "...", "status": "..."}`; eşleşmeyen: `{"chunk_id": "...", "dogrulandi": false}` |
 | `error` | Döngü `tamam` dışı bir durumla bitti ya da model çağrısı başarısız | `{"code": "...", "message": "..."}` |
 | `done` | Döngü beş bitiş durumundan biriyle bitti | `{"status": "...", "reason": null, "turns": 0, "instruction": {"name": "...", "version": "...", "summary": "..."}, "audit_id": "..."}` |
 
@@ -44,6 +45,7 @@ Alan adları `AgentResult` ile aynıdır (`docs/agent.md` › Sonuç). Tablo kap
 - `selection_card`: `query` zarfın `filters.query`'si, `message` `error.message`'ı, `candidates` `value` dizisinin kendisi (`resolve_flight_identity` › `value_schema`, `flight_id`'ye göre artan).
 - `kpi_card.items`: `value`'daki tamsayı alanlar, kontrattaki `value_schema` sırasıyla (`total`, `cancelled`, `delayed`); `description` kontrattaki alan açıklamasıdır (`backend/tools/contracts/get_flight_summary.json`).
 - `error`: döngü durumlarında `code` `status`'tur, `message` `AgentResult.reason`'dır (`docs/agent.md` › Durumlar'daki metin). Model çağrısı başarısızsa `code` `model_error`, `message` `ERROR_MESSAGE`'dır (`backend/main.py`).
+- `citation`: alanların anlamı ve eşleme kuralları aşağıda, Atıf olayı'ndadır.
 - `done`: `status`, `reason`, `instruction` `AgentResult`'tan; `turns` `len(AgentResult.turns)`; `audit_id` bu sorunun audit satırının kimliği; satır akış bittikten sonra yazılır (`docs/audit.md`).
 
 ## Sıra
@@ -55,7 +57,7 @@ Döngü sürerken (tur `tool_use` ile bitti, sınır aşılmadı) bir turda: her
 Döngü bitince:
 
 ```text
-tamam                : text_delta+ (metin boş değilse), done
+tamam                : text_delta+ (metin boş değilse), citation*, done
 diğer dört durum     : error, done
 model çağrısı hatası : error            (done yok)
 ```
@@ -78,6 +80,19 @@ model çağrısı hatası : error            (done yok)
 9. Hata ayrıntısı (exception metni, API yanıtı, request id) hiçbir olaya girmez; `logger.exception` ile sunucu loguna yazılır.
 10. Senkron döngü olay döngüsünü bloklamaz (thread havuzunda çalışır); olaylar üretildikçe yazılır.
 11. Testler sahte modelle koşar, ağa çıkmaz.
+12. `citation` yalnızca kodda üretilir. Cevap metninden yalnızca etiketin `chunk_id`'si okunur; belge alanları `search_documents` zarfından olduğu gibi taşınır, model bunları yazmaz (`docs/kaynakli.md › Atıf`).
+
+## Atıf olayı
+
+Sözleşmenin kaynağı `docs/kaynakli.md › Atıf`'tır; burada yalnızca akıştaki biçimi tanımlanır.
+
+- **Etiket:** nihai cevapta (`AgentResult.text`) köşeli parantez içinde yazılmış, `search_documents` kontratındaki `chunk_id` biçimine (`D03#02`) uyan kimlik: `[D03#02]`. Başka biçimli köşeli parantez içeriği etiket sayılmaz. Etiketler metinden değiştirilmeden okunur; metin `text_delta`'larda olduğu gibi kalır.
+- **Sıra ve sayı:** etiket başına bir `citation`, cevaptaki ilk geçiş sırasıyla. Aynı `chunk_id` cevapta birden çok geçse de tek olay çıkar. Olaylar `text_delta`'lardan sonra, `done`'dan önce gelir ve yalnızca `tamam`'da çıkar (Kod garantileri 8).
+- **Eşleme:** etiket, bu koşuda çalışan `search_documents` çağrılarından `error` `null` olanların `value` parçalarıyla `chunk_id` üzerinden eşleşir. Birden çok çağrıda aynı `chunk_id` gelirse ilk çağrıdaki parça kullanılır.
+- **Eşleşen etiket:** `dogrulandi: true`; `title`, `section`, `revision`, `effective_from` ve `status` parçadan olduğu gibi taşınır (yorum, çeviri, saat dönüşümü yok). `status` arayüzün eski sürümü işaretlemesi içindir.
+- **Eşleşmeyen etiket:** `dogrulandi: false`, belge alanları yoktur. Tool hiç çağrılmadıysa ya da çağrılan arama parça getirmediyse, cevaptaki her etiket bu durumdadır.
+- **Etiket yoksa olay yoktur.** Tool çağrılmadıysa da öyledir (atıf borcu yoktur).
+- **Kapsam dışı:** `atifsiz` (tool çağrıldı, parça geldi, cevapta etiket yok) bu olayla taşınmaz; yeri `docs/agent.md` ve `docs/audit.md`'de netleşecektir (`docs/kaynakli.md › Atıf`).
 
 ## Durum ve olay eşlemesi
 
@@ -85,7 +100,7 @@ model çağrısı hatası : error            (done yok)
 
 | Durum | Olay |
 |---|---|
-| `tamam` | `text_delta`'lar, `done` |
+| `tamam` | `text_delta`'lar, `citation`'lar (etiket varsa), `done` |
 | `iterasyon_siniri` | `error` (`code: iterasyon_siniri`, `message: reason`), `done` |
 | `tekrar_siniri` | `error` (`code: tekrar_siniri`, `message: reason`), `done` |
 | `max_tokens` | `error` (`code: max_tokens`, `message: reason`), `done` |
@@ -122,12 +137,13 @@ Eksik alan kuralı (ilke 6'nın ilk yarısı) ve belirsizlik kuralı (ilke 5) v1
 
 `docs/http.md` › Arayüz kuralları'ndaki zarf kuralları burada da geçerlidir.
 
-1. Akış `fetch` ile okunur (POST gövdesi gerekir); çerçeveler `event:` ve `data:` satırlarından ayrıştırılır. Tablodaki sekiz tip dışındaki olay yok sayılır (`map_command`'ı işleyen kod `docs/harita.md` › Arayüz işleyicisi'ndedir; o gelene kadar `chat.ts` olayı yok sayar).
+1. Akış `fetch` ile okunur (POST gövdesi gerekir); çerçeveler `event:` ve `data:` satırlarından ayrıştırılır. Tablodaki dokuz tip dışındaki olay yok sayılır (`map_command`'ı işleyen kod `docs/harita.md` › Arayüz işleyicisi'ndedir; `citation` madde 7'de).
 2. `text_delta` geldiği sırayla eklenir; `tool_call` küçük bir satır (tool adı ve ham `input` gösterilmez; `docs/system-talimat.md` › Cevap metni); çip ve kartlar olay verisini olduğu gibi gösterir. `as_of` `+03:00` saatiyle gösterilir, tarayıcı saatine çevrilmez; yaş hesaplanmaz, `stale` yeniden türetilmez.
 3. Seçim kartındaki bir aday seçilince yeni bir soru gönderilir: orijinal soru ile seçilen adayın `flight_no` ve `registration`'ı, zarftaki yazımıyla. Chat belleği olmadığı için orijinal soru yeni mesajda tekrar edilir.
 4. `error` olayı kullanıcıya `message` alanıyla gösterilir; `code` ve teknik ayrıntı gösterilmez. `error`'dan önce gelen çip ve kartlar cevap sayılmaz.
 5. `tamam` ama `text_delta` yoksa genel bir "Cevap üretilmedi." mesajı gösterilir.
 6. Doğrulama sayfası (`/`, `frontend/src/App.tsx`) değişmez.
+7. `citation` her etiket için bir chip olarak, `source_chip`'lerden önce çizilir (`Chat.tsx` › `Citations`); `error` olan turda gösterilmez (madde 4). Eşleşen chip `[chunk_id] title › section · rev revision · effective_from` alanlarını olduğu gibi yazar; `status` `superseded` ise "ESKİ SÜRÜM" rozeti ekler (durum olaydan okunur, türetilmez). `dogrulandi: false` chip kırmızıdır ve yalnızca kimlikle "doğrulanamadı" der. Turda `search_documents` için `tool_call` geldiyse, döngü `tamam` ile bittiyse ve hiç `citation` gelmediyse tek satırlık uyarı çıkar ("Cevap belge kaynağına atıf yapmıyor; doğrulanamaz."). Uçuş soruları bu uyarıyı almaz. Tool adı yalnızca bu koşul için istemcide sabittir; `atifsiz` kodlanınca uyarı ona bağlanmalıdır (`Kapsam dışı`, Atıf olayı).
 
 ## Kapsam dışı
 

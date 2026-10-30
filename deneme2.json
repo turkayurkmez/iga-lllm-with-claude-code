@@ -1,0 +1,107 @@
+{
+  "model": "voyage-4",
+  "sorular": [
+    {
+      "id": "S1",
+      "kategori": "cevaplanabilir",
+      "include_superseded": false,
+      "puan": 0.6913648952754776,
+      "chunk_id": "D01#05",
+      "doc_id": "D01",
+      "beklenen_belgede": true
+    },
+    {
+      "id": "S2",
+      "kategori": "cevaplanabilir",
+      "include_superseded": true,
+      "puan": 0.30391959763153475,
+      "chunk_id": "D09#03",
+      "doc_id": "D09",
+      "beklenen_belgede": false
+    },
+    {
+      "id": "S3",
+      "kategori": "cevaplanabilir",
+      "include_superseded": false,
+      "puan": 0.7299545550636369,
+      "chunk_id": "D07#04",
+      "doc_id": "D07",
+      "beklenen_belgede": true
+    },
+    {
+      "id": "S4",
+      "kategori": "cevaplanabilir",
+      "include_superseded": false,
+      "puan": 0.6619700536027018,
+      "chunk_id": "D03#02",
+      "doc_id": "D03",
+      "beklenen_belgede": true
+    },
+    {
+      "id": "S5",
+      "kategori": "cevaplanabilir",
+      "include_superseded": false,
+      "puan": 0.5935843465223019,
+      "chunk_id": "D05#03",
+      "doc_id": "D05",
+      "beklenen_belgede": true
+    },
+    {
+      "id": "S6",
+      "kategori": "cevaplanabilir",
+      "include_superseded": false,
+      "puan": 0.46592938795823874,
+      "chunk_id": "D11#01",
+      "doc_id": "D11",
+      "beklenen_belgede": true
+    },
+    {
+      "id": "S7",
+      "kategori": "cevaplanabilir",
+      "include_superseded": false,
+      "puan": 0.5005849511394187,
+      "chunk_id": "D04#04",
+      "doc_id": "D04",
+      "beklenen_belgede": true
+    },
+    {
+      "id": "U1",
+      "kategori": "cevaplanamaz",
+      "include_superseded": false,
+      "puan": 0.3489057108535144,
+      "chunk_id": "D03#05",
+      "doc_id": "D03",
+      "beklenen_belgede": null
+    },
+    {
+      "id": "U2",
+      "kategori": "cevaplanamaz",
+      "include_superseded": false,
+      "puan": 0.39021444722562093,
+      "chunk_id": "D15#04",
+      "doc_id": "D15",
+      "beklenen_belgede": null
+    },
+    {
+      "id": "U3",
+      "kategori": "cevaplanamaz",
+      "include_superseded": false,
+      "puan": 0.2962164678913944,
+      "chunk_id": "D13#01",
+      "doc_id": "D13",
+      "beklenen_belgede": null
+    }
+  ],
+  "kategoriler": {
+    "cevaplanabilir": {
+      "soru_sayisi": 7,
+      "en_dusuk": 0.30391959763153475,
+      "en_yuksek": 0.7299545550636369
+    },
+    "cevaplanamaz": {
+      "soru_sayisi": 3,
+      "en_dusuk": 0.2962164678913944,
+      "en_yuksek": 0.39021444722562093
+    }
+  }
+}

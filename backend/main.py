@@ -174,6 +174,10 @@ class EventingClient:
         self._pending: list = []
         self.messages = self
 
+    def citations(self, text: str) -> list[dict]:
+        """Nihai cevabın etiketleri, bu koşuda getirilen parçalarla eşleşmiş olarak."""
+        return self._cards.citations(text)
+
     def create(self, **request: Any) -> Any:
         if self._pending:
             self._emit_turn(self._pending, request["messages"][-1]["content"])
@@ -227,6 +231,8 @@ def run_chat(
     if result.status == "tamam":
         if result.text:
             emit("text_delta", {"text": result.text})
+            for data in client.citations(result.text):
+                emit("citation", data)
     else:
         emit("error", {"code": result.status, "message": result.reason})
     emit(
@@ -456,9 +462,7 @@ def rag_search_endpoint(
         if value is not None
     }
     try:
-        results = rag_search.search(
-            q, k=k, method=method, priority=priority, **filters
-        )
+        results = rag_search.search(q, k=k, method=method, priority=priority, **filters)
     except rag_search.IndexNotReadyError as exc:
         logger.warning("Arama indeksi hazır değil: %s", exc)
         message, code = INDEX_NOT_READY_MESSAGE, exc.code

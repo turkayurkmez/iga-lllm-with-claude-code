@@ -9,6 +9,7 @@ import {
   sendFeedback,
   streamChat,
   type Candidate,
+  type Citation,
   type Done,
   type KpiCard,
   type SelectedObject,
@@ -23,6 +24,9 @@ interface Turn {
   // Mesajla giden harita bağlamı (gönderim anındaki seçim); sonradan değişmez.
   context: SelectedObject | null
   toolCalls: number
+  // Belge araması istendi mi; atıf uyarısının tek koşulu (docs/chat.md › Arayüz kuralları 7).
+  searched: boolean
+  citations: Citation[]
   chips: SourceChip[]
   kpis: KpiCard[]
   selections: SelectionCard[]
@@ -37,7 +41,9 @@ interface Turn {
 type FeedbackState = 'idle' | 'sending' | 'sent' | 'failed'
 
 const CANDIDATE_COLUMNS = ['flight_no', 'callsign', 'registration', 'movement_type'] as const
-const ISO_TIME = /^\d{4}-\d{2}-\d{2}T(\d{2}:\d{2})/
+// Belge araması tool'u; atıf uyarısı bu çağrıya bağlıdır (uçuş soruları uyarı almaz).
+const SEARCH_TOOL = 'search_documents'
+const ISO_TIME =/^\d{4}-\d{2}-\d{2}T(\d{2}:\d{2})/
 
 // ISO zamanın HH:MM kısmı, zarftaki +03:00 saatiyle; tarayıcı saatine çevrilmez.
 function clock(iso: unknown): string | null {
@@ -78,6 +84,28 @@ function Chips({ chips }: { chips: SourceChip[] }) {
           {chip.error_code !== null && <code>{chip.error_code}</code>}
         </li>
       ))}
+    </ul>
+  )
+}
+
+// Her etiket bir chip: eşleşen belge alanlarıyla olduğu gibi, eşleşmeyen kırmızı.
+// Eski sürüm (status superseded) rozet alır; durum olaydan okunur, türetilmez.
+function Citations({ citations }: { citations: Citation[] }) {
+  return (
+    <ul className="chips citations" aria-label="Belge kaynakları">
+      {citations.map((citation) =>
+        citation.dogrulandi ? (
+          <li key={citation.chunk_id} className="chip citation">
+            <code>[{citation.chunk_id}]</code> {citation.title} › {citation.section} · rev{' '}
+            {citation.revision} · {citation.effective_from}
+            {citation.status === 'superseded' && <strong className="badge"> ESKİ SÜRÜM</strong>}
+          </li>
+        ) : (
+          <li key={citation.chunk_id} className="chip citation unverified">
+            <code>[{citation.chunk_id}]</code> doğrulanamadı
+          </li>
+        ),
+      )}
     </ul>
   )
 }
@@ -205,6 +233,8 @@ function Chat() {
         question,
         context: selected,
         toolCalls: 0,
+        searched: false,
+        citations: [],
         chips: [],
         kpis: [],
         selections: [],
@@ -219,7 +249,13 @@ function Chat() {
     await streamChat(
       question,
       {
-      onToolCall: () => update(id, (turn) => ({ toolCalls: turn.toolCalls + 1 })),
+      onToolCall: (call) =>
+        update(id, (turn) => ({
+          toolCalls: turn.toolCalls + 1,
+          searched: turn.searched || call.name === SEARCH_TOOL,
+        })),
+      onCitation: (citation) =>
+        update(id, (turn) => ({ citations: [...turn.citations, citation] })),
       // Komut yalnızca durumu değiştirir; ağ isteği yapmaz. Haritada olmayan nesne atlanır.
       onMapCommand: (command) => {
         if (command.command === 'focus_map_object') {
@@ -278,6 +314,9 @@ function Chat() {
           // Geri bildirim yalnızca tamam'da ve audit satırı yazıldıysa (audit_id dolu).
           const auditId =
             turn.error === null && turn.done?.status === 'tamam' ? turn.done.audit_id : null
+          // Belge araması yapıldı, cevap tamam ve hiç etiket gelmedi: tek satırlık uyarı.
+          const uncited =
+            showCards && turn.done?.status === 'tamam' && turn.searched && turn.citations.length === 0
           return (
             <article key={turn.id} className="turn">
               <p className="question">{turn.question}</p>
@@ -307,6 +346,12 @@ function Chat() {
                       onPick={(candidate) => void ask(followUp(turn.question, candidate))}
                     />
                   ))}
+                {showCards && turn.citations.length > 0 && (
+                  <Citations citations={turn.citations} />
+                )}
+                {uncited && (
+                  <p className="notice warn">Cevap belge kaynağına atıf yapmıyor; doğrulanamaz.</p>
+                )}
                 {showCards && turn.chips.length > 0 && <Chips chips={turn.chips} />}
                 {turn.done !== null && (
                   <p className="stop">

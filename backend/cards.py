@@ -5,10 +5,16 @@ zarftan (ve kpi_card açıklamaları kontrattan) kurulur; zarf yorumlanmaz: hesa
 yuvarlama, saat dönüşümü yoktur, alanlar olduğu gibi taşınır.
 """
 
+import re
+
 from backend.envelope import ErrorCode
 from backend.tools._ortak import load_contract
 
 SUMMARY_TOOL = "get_flight_summary"
+SEARCH_TOOL = "search_documents"
+# Etiket biçimi search_documents kontratındaki chunk_id desenidir: [D03#02].
+CITATION_TAG = re.compile(r"\[(D\d{2}#\d{2,})\]")
+CITATION_DOCUMENT_FIELDS = ("title", "section", "revision", "effective_from", "status")
 MAP_TOOLS = ("focus_map_object", "highlight_map_set")
 
 
@@ -69,14 +75,40 @@ def selection_card(envelope: dict) -> dict | None:
     }
 
 
+def retrieved_chunks(name: str, envelope: dict) -> list[dict]:
+    """Başarılı search_documents zarfının parçaları; hatalı zarf parça getirmemiştir."""
+    if name != SEARCH_TOOL or envelope["error"] is not None:
+        return []
+    return envelope["value"] or []
+
+
+def citation(chunk_id: str, chunks: dict[str, dict]) -> dict:
+    """Etiketin olayı: eşleşen parçanın belge alanları olduğu gibi, yoksa yalnızca kimlik."""
+    found = chunks.get(chunk_id)
+    if found is None:
+        return {"chunk_id": chunk_id, "dogrulandi": False}
+    return {"chunk_id": chunk_id, "dogrulandi": True} | {
+        field: found[field] for field in CITATION_DOCUMENT_FIELDS
+    }
+
+
 class CardBuilder:
     """Bir /chat koşusunun kartlarını üretir; aynı çip bir koşuda bir kez çıkar."""
 
     def __init__(self) -> None:
         self._chips: set[tuple] = set()
+        self._chunks: dict[str, dict] = {}
+
+    def citations(self, text: str) -> list[dict]:
+        """Cevaptaki her ayrık etiketin olayı, ilk geçiş sırasıyla (docs/chat.md › Atıf olayı)."""
+        chunk_ids = dict.fromkeys(CITATION_TAG.findall(text))
+        return [citation(chunk_id, self._chunks) for chunk_id in chunk_ids]
 
     def cards(self, name: str, envelope: dict) -> list[tuple[str, dict]]:
         """Zarfın olayları, sırasıyla: çip (yeni ise), ardından kpi, seçim kartı ya da komut."""
+        for found in retrieved_chunks(name, envelope):
+            # Aynı kimlik birden çok aramada gelirse ilk çağrının parçası kalır.
+            self._chunks.setdefault(found["chunk_id"], found)
         events = []
         chip = source_chip(name, envelope)
         if chip is not None:

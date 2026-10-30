@@ -1,6 +1,6 @@
 // POST /chat istemcisi. Yanıt SSE akışıdır; olaylar docs/chat.md › Olay tipleri'ndedir:
-// tool_call, source_chip, kpi_card, selection_card, map_command, text_delta, ardından
-// done ya da error. EventSource POST desteklemediği için gövde fetch akışından okunup olaylar
+// tool_call, source_chip, kpi_card, selection_card, map_command, text_delta, citation,
+// ardından done ya da error. EventSource POST desteklemediği için gövde fetch akışından okunup olaylar
 // burada ayrıştırılır. Olay verisi olduğu gibi iletilir; yeniden hesaplanmaz.
 
 export const NETWORK_MESSAGE = 'Sunucuya ulaşılamadı.'
@@ -51,6 +51,20 @@ export interface SelectionCard {
   as_of: string | null
 }
 
+// Cevaptaki bir parça etiketi (docs/chat.md › Atıf olayı). Eşleşmeyen etiket yalnızca
+// kimlik taşır; eşleşende belge alanları search_documents zarfından olduğu gibi gelir.
+export type Citation =
+  | { chunk_id: string; dogrulandi: false }
+  | {
+      chunk_id: string
+      dogrulandi: true
+      title: string
+      section: string
+      revision: string
+      effective_from: string
+      status: string
+    }
+
 // Harita komutu: zarfın value'su olduğu gibi (docs/harita.md › map_command olayı).
 export type ObjectType = 'flight' | 'stand'
 
@@ -80,6 +94,7 @@ export interface ChatHandlers {
   onSelection: (card: SelectionCard) => void
   onMapCommand: (command: MapCommand) => void
   onText: (text: string) => void
+  onCitation: (citation: Citation) => void
   onDone: (done: Done) => void
   // Sunucunun genel Türkçe mesajı ya da istemcinin kendi genel mesajı.
   onError: (message: string) => void
@@ -189,6 +204,20 @@ function isMapCommand(data: Record<string, unknown>): data is Record<string, unk
   return false
 }
 
+// dogrulandi true ise beş belge alanının hepsi metin olmalı; false ise yalnızca kimlik gelir.
+function isCitation(data: Record<string, unknown>): data is Record<string, unknown> & Citation {
+  if (!isString(data.chunk_id)) return false
+  if (data.dogrulandi === false) return true
+  return (
+    data.dogrulandi === true &&
+    isString(data.title) &&
+    isString(data.section) &&
+    isString(data.revision) &&
+    isString(data.effective_from) &&
+    isString(data.status)
+  )
+}
+
 function isDone(data: Record<string, unknown>): data is Record<string, unknown> & Done {
   const { instruction } = data
   return (
@@ -225,7 +254,7 @@ async function errorDetail(response: Response): Promise<string> {
 
 // Olayları sırayla işler; akışı bitiren olay (done ya da error) geldiyse true döner.
 // Biçimi bozuk ara olay atlanır; biçimi bozuk son olay akış hatası sayılır. Tablodaki
-// sekiz tip dışındaki olay yok sayılır (docs/chat.md › Arayüz kuralları 1).
+// dokuz tip dışındaki olay yok sayılır (docs/chat.md › Arayüz kuralları 1).
 export function dispatch(event: SseEvent, handlers: ChatHandlers): boolean {
   const data = parseData(event.data)
   switch (event.event) {
@@ -246,6 +275,9 @@ export function dispatch(event: SseEvent, handlers: ChatHandlers): boolean {
       return false
     case 'text_delta':
       if (data !== null && isString(data.text)) handlers.onText(data.text)
+      return false
+    case 'citation':
+      if (data !== null && isCitation(data)) handlers.onCitation(data)
       return false
     case 'done':
       if (data !== null && isDone(data)) handlers.onDone(data)

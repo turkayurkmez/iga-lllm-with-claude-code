@@ -293,6 +293,26 @@ button.thumbs-down:disabled {
   font-family: var(--mono);
 }
 
+/* Belge atıfı: kimlik başta, boşluk soldan değil sağdan. */
+.chip.citation code {
+  margin: 0 4px 0 0;
+}
+
+.chip.citation.unverified {
+  border-color: var(--bad);
+  background: var(--bad-bg);
+  color: var(--bad);
+}
+
+.chip .badge {
+  margin-left: 4px;
+  padding: 1px 6px;
+  border: 1px solid var(--warn);
+  border-radius: 4px;
+  font-size: 0.7rem;
+  color: var(--warn);
+}
+
 .kpi {
   margin: 8px 0;
 }
