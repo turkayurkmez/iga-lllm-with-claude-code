@@ -12,10 +12,10 @@ from pathlib import Path
 SEARCH_TOOL = "search_documents"
 
 # Kalıplar Türkçe i/ı farkını yok saymak için normalize edilmiş metne uygulanır
-# (bkz. `_fold`): metinde `İ`/`ı` `i`'ye çevrilir, kalıplarda yalnızca `i` yazılır.
+# (bkz. `fold`): metinde `İ`/`ı` `i`'ye çevrilir, kalıplarda yalnızca `i` yazılır.
 FINDINGS: dict[str, re.Pattern[str]] = {
     "yok_say": re.compile(
-        r"(?:(?:[oö]nceki|yukaridaki|tum)\s+(?:talimat\w*|kural\w*|y[oö]nerge\w*)"
+        r"(?:(?:[oö]nceki|yukaridaki|t[uü]m)\s+(?:talimat\w*|kural\w*|y[oö]nerge\w*)"
         r"[^.\n]{0,40}?(?:yok\s+say|unut|dikkate\s+alma)"
         r"|ignore\s+(?:all\s+|any\s+)?(?:previous|prior|above)\s+"
         r"(?:instructions|rules))",
@@ -39,14 +39,15 @@ _DELIMITER = re.compile(r"<\s*/?\s*belge", re.IGNORECASE)
 _DELIMITER_REPLACEMENT = "[belge-etiketi]"
 
 
-def _fold(text: str) -> str:
+def fold(text: str) -> str:
+    """Türkçe i/ı farkını siler (İ, ı → i); karşılaştırmalar küçük harfe de çevirmeli."""
     # str.lower() `İ`'yi iki karakter yapar; i/ı farkı kalıpları atlatmasın diye elle.
     return text.replace("İ", "i").replace("ı", "i")
 
 
 def scan_text(text: str) -> list[str]:
     """Metinde eşleşen bulgu kodları; alfabetik ve tekrarsız."""
-    folded = _fold(text)
+    folded = fold(text)
     return sorted(code for code, pattern in FINDINGS.items() if pattern.search(folded))
 
 
