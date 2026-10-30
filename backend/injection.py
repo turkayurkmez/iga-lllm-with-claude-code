@@ -11,25 +11,28 @@ from pathlib import Path
 
 SEARCH_TOOL = "search_documents"
 
-# Kalıplar Türkçe i/ı farkını yok saymak için normalize edilmiş metne uygulanır
-# (bkz. `fold`): metinde `İ`/`ı` `i`'ye çevrilir, kalıplarda yalnızca `i` yazılır.
+# Kalıplar `fold` ile ASCII'ye katlanmış metne uygulanır: Türkçe harfler kalıplarda
+# ASCII yazılır (ifşa → ifsa).
 FINDINGS: dict[str, re.Pattern[str]] = {
     "yok_say": re.compile(
-        r"(?:(?:[oö]nceki|yukaridaki|t[uü]m)\s+(?:talimat\w*|kural\w*|y[oö]nerge\w*)"
+        r"(?:(?:onceki|yukaridaki|tum)\s+(?:talimat\w*|kural\w*|yonerge\w*)"
         r"[^.\n]{0,40}?(?:yok\s+say|unut|dikkate\s+alma)"
         r"|ignore\s+(?:all\s+|any\s+)?(?:previous|prior|above)\s+"
         r"(?:instructions|rules))",
         re.IGNORECASE,
     ),
     "rol_taklidi": re.compile(
-        r"^\s*(?:system|assistant|sistem|asistan)\s*:", re.IGNORECASE | re.MULTILINE
+        r"^[^\S\n]*(?:system|assistant|sistem|asistan)[^\S\n]*:",
+        re.IGNORECASE | re.MULTILINE,
     ),
     "ifsa_istegi": re.compile(
         r"(?:sistem\s+(?:talimat|prompt|mesaj)\w*[^.\n]{0,40}?"
-        r"(?:yazdir|g[oö]ster|payla[sş]|ifsa|a[cç]ikla)|system\s+prompt)",
+        r"(?:yazdir|goster|paylas|ifsa|acikla)|system\s+prompt)",
         re.IGNORECASE,
     ),
-    "gizli_unicode": re.compile(r"[\u200b-\u200f\u202a-\u202e\u2060-\u2064\ufeff]"),
+    "gizli_unicode": re.compile(
+        r"[\u00ad\u180e\u200b-\u200f\u202a-\u202e\u2060-\u2064\u2066-\u2069\ufeff\U000e0000-\U000e007f]"
+    ),
     "html_yorumu": re.compile(r"<!--"),
 }
 
@@ -39,10 +42,16 @@ _DELIMITER = re.compile(r"<\s*/?\s*belge", re.IGNORECASE)
 _DELIMITER_REPLACEMENT = "[belge-etiketi]"
 
 
+_TURKISH_TO_ASCII = str.maketrans("İıŞşÇçĞğÖöÜü", "iissccggoouu")
+
+
 def fold(text: str) -> str:
-    """Türkçe i/ı farkını siler (İ, ı → i); karşılaştırmalar küçük harfe de çevirmeli."""
-    # str.lower() `İ`'yi iki karakter yapar; i/ı farkı kalıpları atlatmasın diye elle.
-    return text.replace("İ", "i").replace("ı", "i")
+    """Türkçe harfleri ASCII'ye katlar (İ ı ş ç ğ ö ü → i s c g o u).
+
+    str.lower() `İ`'yi iki karakter yaptığı için elle yapılır; karşılaştırmalar
+    ayrıca küçük harfe çevrilmelidir. Kalıplar yalnızca ASCII yazılır.
+    """
+    return text.translate(_TURKISH_TO_ASCII)
 
 
 def scan_text(text: str) -> list[str]:

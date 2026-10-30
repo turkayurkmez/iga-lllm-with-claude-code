@@ -8,7 +8,7 @@ Bu belge, modelin okuduğu güvenilmez içerikten (belge parçası, tool çıkt�
 |---|---|---|---|
 | E1 sınırlandırma | kodlandı | `backend/injection.py` › `render_tool_result` (`backend/agent.py` › `_execute`) | `tests/test_injection.py`, `tests/test_agent.py` |
 | E2 talimat v4 | kodlandı (varsayılan **v3**; geçiş ölçüm sonrası karar) | `backend/instructions/v4.md` | `tests/test_instruction_v4.py` |
-| E3 indeks taraması | kodlandı (`text`, `title`, `section` taranır) | `backend/injection.py` › `filter_chunks`, `backend/rag/index.py` | `tests/test_injection.py`, `tests/test_rag_index.py` |
+| E3 indeks taraması | **kısmen** (`text`, `title`, `section` taranır; kodlanan kalıplar `FINDINGS`: `yok_say`, `rol_taklidi`, `ifsa_istegi`, `gizli_unicode`, `html_yorumu`; "emir kipi" ve "gizlenmiş metin" tespiti kodlanmadı) | `backend/injection.py` › `filter_chunks`, `backend/rag/index.py` | `tests/test_injection.py`, `tests/test_rag_index.py` |
 | E4 girdi sınırı | kodlandı | `backend/main.py` › `MAX_MESSAGE_CHARS` | `tests/test_chat.py` |
 | E5 çıktı doğrulama | kodlandı (yalnızca işaretler) | `backend/injection.py`, `backend/audit.py` | `tests/test_injection.py`, `tests/test_audit.py` |
 | E6 izleme | kodlandı | `backend/audit.py`, `scripts/audit_report.py --isaretli` | `tests/test_audit.py`, `tests/test_audit_report.py` |
@@ -71,7 +71,7 @@ Her gereksinim testle sabitlenir. Numara kalıcıdır.
 - Çıkış ölçütü: E7 saldırı setinde v4 başarı oranı v3'ten kötü olamaz.
 
 ### E3. İndeks zamanı tarama (A3)
-- `build_index` her parçayı tarar; bulgu yoksa davranış değişmez. Taranan kalıplar: önceki talimatı yok sayma ifadeleri (Türkçe ve İngilizce), modele ya da "asistan"a hitap eden emir kipi, rol/sistem mesajı taklidi (`system:`, `assistant:`), gizli Unicode (sıfır genişlikli, bidi kontrol), HTML yorumu, gizlenmiş metin.
+- `build_index` her parçayı tarar; bulgu yoksa davranış değişmez. Taranan kalıplar: önceki talimatı yok sayma ifadeleri (Türkçe ve İngilizce), modele ya da "asistan"a hitap eden emir kipi, rol/sistem mesajı taklidi (`system:`, `assistant:`), gizli Unicode (sıfır genişlikli, bidi kontrol), HTML yorumu, gizlenmiş metin. **Uygulama notu:** eşleme Türkçe harfleri ASCII'ye katlayarak yapılır (`ifşa` = `ifsa`, `İ/ı` = `i`); emir kipi ve gizlenmiş metin kalıpları henüz yoktur, bu satırdaki liste hedeftir (durum tablosuna bakın). Gizli Unicode kapsamı: sıfır genişlikli, bidi kontrol ve izolat, soft hyphen, Unicode etiket karakterleri.
 - Şüpheli parça **indekse alınmaz**; ne bulunduğu ve parçanın kimliği stderr'e yazılır, `build_index` bu durumda `meta.json`'a `quarantined` (`[{chunk_id, codes}]`) yazar (bulgu yoksa alan hiç yazılmaz), indeks yine de kurulur (iyi parçalar kullanılabilir kalsın). Tüm parçalar karantinaya girerse mevcut "boş indeks" hatası verilir ve var olan indeks kalır.
 - Tarama kalıpları tek yerde, veri olarak tutulur; yanlış pozitif için belge sahibi onaylı bir istisna listesi (`kimlik` + gerekçe) desteklenir.
 - Korpusa yazma erişimi ve değişiklik incelemesi kod dışı süreçtir; bu belge yalnızca gerekliliği kayda geçirir.
