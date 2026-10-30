@@ -63,7 +63,9 @@ def data(**tables) -> dict:
                 "operator_iata": "TK",
             }
         ],
-        "stands": [{"stand_code": "C101", "stand_type": "CONTACT", "max_code_letter": "C"}],
+        "stands": [
+            {"stand_code": "C101", "stand_type": "CONTACT", "max_code_letter": "C"}
+        ],
     }
     return base | tables
 
@@ -205,7 +207,11 @@ def test_aircraft_ve_stand_birlesimi_eslesme_yoksa_alan_yok():
 
 @pytest.mark.parametrize(
     ("table", "drop"),
-    [("flights", "cancelled"), ("movements", "movement_type"), ("delays", "delay_minutes")],
+    [
+        ("flights", "cancelled"),
+        ("movements", "movement_type"),
+        ("delays", "delay_minutes"),
+    ],
 )
 def test_zorunlu_alan_eksikse_veri_hatasi(table, drop):
     from backend.tools._ortak import DataError
@@ -227,7 +233,9 @@ def test_referans_gunde_satir_sayisi_ve_havayolu_dagilimi():
     rows = load().build_rows(reference)
 
     assert len(rows) == 600
-    arrivals = Counter(row["airline"] for row in rows if row["movement_type"] == "ARRIVAL")
+    arrivals = Counter(
+        row["airline"] for row in rows if row["movement_type"] == "ARRIVAL"
+    )
     ordered = sorted(arrivals.items(), key=lambda item: (-item[1], item[0]))
     assert ordered == [
         ("TK", 154),
