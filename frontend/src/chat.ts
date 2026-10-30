@@ -257,6 +257,8 @@ async function errorDetail(response: Response): Promise<string> {
 // dokuz tip dışındaki olay yok sayılır (docs/chat.md › Arayüz kuralları 1).
 export function dispatch(event: SseEvent, handlers: ChatHandlers): boolean {
   const data = parseData(event.data)
+  // GEÇİCİ: zarftan türetilen olayların verisini console'a yaz (sonra sil)
+  if (['source_chip', 'kpi_card', 'selection_card', 'map_command'].includes(event.event)) console.log('[GEÇİCİ]', event.event, data) // GEÇİCİ
   switch (event.event) {
     case 'tool_call':
       if (data !== null && isToolCall(data)) handlers.onToolCall(data)
