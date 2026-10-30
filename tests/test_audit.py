@@ -56,6 +56,8 @@ QUESTION_FIELDS = [
     "client_disconnected",
     "injection_flags",
     "unverified_numbers",
+    "session_id",
+    "turn_index",
 ]
 CALL_FIELDS = [
     "turn",
@@ -334,6 +336,8 @@ def test_soru_tek_satir_ve_alanlar_sozlesmedeki_sirada(chat, llm, audit_dir):
         "client_disconnected": False,
         "injection_flags": [],
         "unverified_numbers": [],
+        "session_id": of_type(events, "done")[0]["session_id"],
+        "turn_index": 1,
     }
     assert len(line["chips"]) == 1
     assert list(line["tool_calls"][0]) == CALL_FIELDS
@@ -508,7 +512,11 @@ def test_model_hatasi_genel_mesajla_satir_yazar(
         "client_disconnected": False,
         "injection_flags": [],
         "unverified_numbers": [],
+        # done olayı yok; oturum kimliği yalnızca kayıttadır.
+        "session_id": line["session_id"],
+        "turn_index": 1,
     }
+    assert re.fullmatch(r"[0-9a-f]{32}", line["session_id"])
 
 
 def test_hata_ayrintisi_kayda_girmez(chat, audit_dir):
@@ -1069,3 +1077,50 @@ def test_cevapsiz_durumda_cevap_denetimleri_calismaz(chat, audit_dir):
     line = only_question(audit_dir)
     assert line["answer"] is None
     assert line["unverified_numbers"] == []
+
+
+# --- Oturum alanları (spec: 2026-10-30-…-design.md › A › Audit) -------------------
+
+
+def test_question_satiri_session_id_ve_turn_index_tasir(chat, audit_dir):
+    events = chat([answer(1)])
+
+    line = only_question(audit_dir)
+    assert line["session_id"] == of_type(events, "done")[0]["session_id"]
+    assert line["turn_index"] == 1
+
+
+def test_ayni_oturumda_turn_index_birer_artar(
+    llm, audit_dir, monkeypatch
+):
+    from backend import session
+
+    monkeypatch.setattr(session, "STORE", session.SessionStore())
+    monkeypatch.setattr(llm, "client", FakeClient([answer(1), answer(1), answer(1)]))
+    client = TestClient(main.app)
+
+    first = client.post("/chat", json={"message": QUESTION})
+    session_id = of_type(parse_sse(first.text), "done")[0]["session_id"]
+    for _ in range(2):
+        client.post("/chat", json={"message": QUESTION, "session_id": session_id})
+
+    lines = read_lines(day_file(audit_dir))
+    assert [line["turn_index"] for line in lines] == [1, 2, 3]
+    assert {line["session_id"] for line in lines} == {session_id}
+
+
+def test_gecmis_icerigi_audit_e_girmez(llm, audit_dir, monkeypatch):
+    from backend import session
+
+    monkeypatch.setattr(session, "STORE", session.SessionStore())
+    monkeypatch.setattr(
+        llm, "client", FakeClient([answer(1, "ILK-CEVAP-ISARETI"), answer(1)])
+    )
+    client = TestClient(main.app)
+    first = client.post("/chat", json={"message": QUESTION})
+    session_id = of_type(parse_sse(first.text), "done")[0]["session_id"]
+
+    client.post("/chat", json={"message": "Devam", "session_id": session_id})
+
+    second = read_lines(day_file(audit_dir))[1]
+    assert "ILK-CEVAP-ISARETI" not in json.dumps(second, ensure_ascii=False)

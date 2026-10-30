@@ -383,6 +383,8 @@ class ChatStream:
                 audit_id=self.audit_id,
                 chips=self._chips,
                 client_disconnected=client_disconnected,
+                session_id=None if self._session is None else self._session.session_id,
+                turn_index=None if self._session is None else self._session.turn_index,
                 **self._outcome,
             )
         except Exception:

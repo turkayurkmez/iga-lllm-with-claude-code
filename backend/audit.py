@@ -106,8 +106,13 @@ def write_question(
     chips: list[dict],
     client_disconnected: bool,
     result: AgentResult | None = None,
+    session_id: str | None = None,
+    turn_index: int | None = None,
 ) -> None:
     """question satırını yazar; yazım hatası çağırana fırlar.
+
+    session_id ve turn_index oturumdaki yeri bildirir (eski satırlarda yoktur). Geçmişin
+    içeriği kayda girmez; question ve answer bu turunkilerdir.
 
     chips akışın source_chip verileridir; value taşımadıkları için olduğu gibi girer.
     """
@@ -130,6 +135,8 @@ def write_question(
             "client_disconnected": client_disconnected,
             "injection_flags": flags,
             "unverified_numbers": numbers,
+            "session_id": session_id,
+            "turn_index": turn_index,
         }
     )
 
