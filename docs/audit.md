@@ -40,6 +40,8 @@ Alan sırası tablodaki gibidir. Bütün alanlar her satırda bulunur; anlamı o
 | `client_disconnected` | mantıksal | İstemci akış bitmeden bağlantıyı kestiyse `true`: son olay (`done` ya da `error`) istemciye iletilemedi. Akış sonuna kadar iletildiyse `false`. |
 | `injection_flags` | liste | Şüphe işaretleri (`docs/enjeksiyon.md` E6): `message:<kod>` (mesajda `backend/injection.py` › `FINDINGS` eşleşmesi; istek reddedilmez), `unverified_numbers`, `instruction_leak` (yalnızca `tamam`), `tekrar_siniri`. Bulgu yoksa `[]`. Bu alan eklenmeden önceki satırlarda yoktur; okuyan kod `record.get("injection_flags")` kullanır. |
 | `unverified_numbers` | liste | Cevapta olup soruda ya da bu koşunun tool `value`'larında bulunmayan sayı/saat simgeleri (yalnızca `tamam`; yoksa `[]`). Eski satırlarda yoktur. |
+| `session_id` | metin | Sorunun oturumu (`docs/chat.md` › Oturum); `done` olayındakiyle aynı. Eski satırlarda yoktur. |
+| `turn_index` | tamsayı | İstek anında oturumdaki kayıtlı tur sayısı + 1 (`tamam` olmayan tur sırayı ilerletmez). Eski satırlarda yoktur. Geçmişin içeriği kayda girmez. |
 
 `tool_calls` öğesi:
 
@@ -125,7 +127,8 @@ Gövde `{"audit_id": "..."}`; ek alan reddedilir.
    "tool_version": "1.0.0", "author": "tool", "error_code": null}],
  "chips": [{"tool": "get_flight_summary", "source": "data/referans/seed42-2026-10-20.json",
    "as_of": "2026-10-20T16:22:00+03:00", "stale": false, "error_code": null}],
- "client_disconnected": false, "injection_flags": [], "unverified_numbers": []}
+ "client_disconnected": false, "injection_flags": [], "unverified_numbers": [],
+ "session_id": "7d1e0c5a9b3f4e2c8a6d4b2f1e9c7a35", "turn_index": 1}
 {"type": "feedback", "audit_id": "3f9c2a7e4b1d4c8e9a0f6b2d7e5c1a3b", "ts": "2026-10-20T16:23:10+03:00", "rating": "down"}
 ```
 

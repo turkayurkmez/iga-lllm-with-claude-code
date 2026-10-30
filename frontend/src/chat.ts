@@ -109,6 +109,10 @@ export interface Done {
   instruction: { name: string; version: string; summary: string }
   // Sorunun audit satırı; yazılamadıysa null ve geri bildirim gösterilmez (docs/audit.md).
   audit_id: string | null
+  // Sunucunun tuttuğu oturum (docs/chat.md › Uç); sonraki mesajla geri gönderilir.
+  session_id: string
+  // İstek bir oturum kimliği taşıyıp oturum bulunamadıysa true: konuşma sıfırlandı.
+  session_reset: boolean
 }
 
 export interface ChatHandlers {
@@ -275,7 +279,9 @@ function isDone(data: Record<string, unknown>): data is Record<string, unknown> 
     isString(instruction.name) &&
     isString(instruction.version) &&
     isString(instruction.summary) &&
-    isNullableString(data.audit_id)
+    isNullableString(data.audit_id) &&
+    isString(data.session_id) &&
+    typeof data.session_reset === 'boolean'
   )
 }
 
@@ -358,18 +364,31 @@ export async function sendFeedback(auditId: string): Promise<boolean> {
   }
 }
 
+// /chat gövdesi: seçim ve oturum yoksa ilgili alan hiç gönderilmez (açık null 422 verir).
+export function chatBody(
+  message: string,
+  selected: SelectedObject | null = null,
+  sessionId: string | null = null,
+): Record<string, unknown> {
+  return {
+    message,
+    ...(selected === null ? {} : { selected }),
+    ...(sessionId === null ? {} : { session_id: sessionId }),
+  }
+}
+
 export async function streamChat(
   message: string,
   handlers: ChatHandlers,
   selected: SelectedObject | null = null,
+  sessionId: string | null = null,
 ): Promise<void> {
   let response: Response
   try {
     response = await fetch('/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      // Seçim yoksa selected alanı hiç gönderilmez (açık null 422 verir).
-      body: JSON.stringify(selected === null ? { message } : { message, selected }),
+      body: JSON.stringify(chatBody(message, selected, sessionId)),
     })
   } catch {
     handlers.onError(NETWORK_MESSAGE)

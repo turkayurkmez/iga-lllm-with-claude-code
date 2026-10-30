@@ -450,6 +450,9 @@ def test_olaylar_agent_sonucuyla_tutarli(chat, responses, status):
     assert len(done) == 1
     # audit_id rastgeledir; biçimi ve kayıtla eşleşmesi tests/test_audit.py'de sınanır.
     assert re.fullmatch(r"[0-9a-f]{32}", done[0].pop("audit_id", None) or "")
+    # Oturum alanları rastgele kimlik taşır; sınavı Oturum geçmişi bölümündedir.
+    assert re.fullmatch(r"[0-9a-f]{32}", done[0].pop("session_id", None) or "")
+    assert done[0].pop("session_reset", None) is False
     assert done == [
         {
             "status": result.status,
@@ -601,3 +604,131 @@ def test_bosluklar_sinirdan_once_kirpilir(chat):
     events, _ = chat([answer(1)], message=message)
 
     assert of_type(events, "done")[0]["status"] == "tamam"
+
+
+# --- Oturum geçmişi (spec: 2026-10-30-…-design.md › A) -------------------------
+
+SESSION_PATTERN = r"^[0-9a-f]{32}$"
+
+
+@pytest.fixture
+def sessions(monkeypatch):
+    """Her test temiz bir oturum deposuyla çalışır; STORE modül düzeyindedir."""
+    from backend import session
+
+    store = session.SessionStore()
+    monkeypatch.setattr(session, "STORE", store)
+    return store
+
+
+@pytest.fixture
+def post(monkeypatch, sessions):
+    """Ham gövdeyle /chat; (yanıt, istemci) döndürür. Ağa çıkılmaz."""
+    llm = importlib.import_module("backend.llm")
+    monkeypatch.setattr(main, "load_llm", lambda: llm)
+    monkeypatch.setattr(llm, "async_client", LegacyAsyncClient())
+
+    def send(responses: list, body: dict):
+        client = FakeClient(responses)
+        monkeypatch.setattr(llm, "client", client)
+        response = TestClient(main.app).post("/chat", json=body)
+        return response, client
+
+    return send
+
+
+def done_of(response) -> dict:
+    return of_type(parse_sse(response.text), "done")[0]
+
+
+def test_ilk_istek_yeni_oturum_acar_ve_done_session_id_tasir(post):
+    response, _ = post([answer(1)], {"message": QUESTION})
+
+    assert response.status_code == 200
+    done = done_of(response)
+    assert re.fullmatch(SESSION_PATTERN, done["session_id"])
+    assert done["session_reset"] is False
+
+
+def test_ikinci_istek_ayni_oturumda_onceki_turu_modele_verir(post):
+    first, _ = post([answer(1)], {"message": QUESTION})
+    session_id = done_of(first)["session_id"]
+
+    second, client = post(
+        [answer(1, "İptal 4.")], {"message": "Peki iptaller?", "session_id": session_id}
+    )
+
+    assert done_of(second)["session_id"] == session_id
+    assert done_of(second)["session_reset"] is False
+    assert client.requests[0]["messages"] == [
+        {"role": "user", "content": QUESTION},
+        {"role": "assistant", "content": ANSWER},
+        {"role": "user", "content": "Peki iptaller?"},
+    ]
+
+
+def test_onceki_turun_tool_cagrilari_nota_girer_sonuclari_girmez(post):
+    first, _ = post(
+        [turn(1, "tool_use", SUMMARY_ALL), answer(2, "Toplam var.")],
+        {"message": QUESTION},
+    )
+    session_id = done_of(first)["session_id"]
+
+    _, client = post([answer(1)], {"message": "Devam", "session_id": session_id})
+
+    previous = client.requests[0]["messages"][1]["content"]
+    assert "get_flight_summary" in previous
+    assert '{"direction":"all"}' in previous
+    # Zarfın sayıları (toplam 600) cevap metninde geçmedikçe geçmişe girmez.
+    assert "600" not in previous
+
+
+def test_bilinmeyen_session_id_reset_ve_yeni_id(post):
+    response, client = post([answer(1)], {"message": QUESTION, "session_id": "a" * 32})
+
+    assert response.status_code == 200
+    done = done_of(response)
+    assert done["session_reset"] is True
+    assert done["session_id"] != "a" * 32
+    assert client.requests[0]["messages"] == [{"role": "user", "content": QUESTION}]
+
+
+@pytest.mark.parametrize("bad", ["x", "A" * 32, "a" * 31, "a" * 33, 123])
+def test_bicimsiz_session_id_422_model_cagrilmaz(post, bad):
+    response, client = post([answer(1)], {"message": QUESTION, "session_id": bad})
+
+    assert response.status_code == 422
+    assert client.requests == []
+
+
+def test_fazla_govde_alani_422_istemci_gecmis_gonderemez(post):
+    body = {"message": QUESTION, "history": [{"question": "x", "answer": "y"}]}
+
+    response, client = post([answer(1)], body)
+
+    assert response.status_code == 422
+    assert client.requests == []
+
+
+def test_tamam_olmayan_tur_gecmise_girmez(post):
+    truncated = model_message("max_tokens", [TextBlock(type="text", text=TRUNCATED)])
+    first, _ = post([truncated], {"message": QUESTION})
+    session_id = done_of(first)["session_id"]
+    assert done_of(first)["status"] == "max_tokens"
+
+    _, client = post([answer(1)], {"message": "Devam", "session_id": session_id})
+
+    assert client.requests[0]["messages"] == [{"role": "user", "content": "Devam"}]
+
+
+def test_haritadan_secim_gecmise_girmez(post):
+    body = {
+        "message": QUESTION,
+        "selected": {"object_type": "stand", "id": "C101"},
+    }
+    first, _ = post([answer(1)], body)
+    session_id = done_of(first)["session_id"]
+
+    _, client = post([answer(1)], {"message": "Devam", "session_id": session_id})
+
+    assert client.requests[0]["messages"][0] == {"role": "user", "content": QUESTION}

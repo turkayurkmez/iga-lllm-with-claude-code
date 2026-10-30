@@ -577,3 +577,74 @@ def test_belge_parcasi_modele_sinirlanmis_gider(monkeypatch):
     # Kayıttaki zarf ham kalır; olaylar, atıf ve audit onu kullanır.
     recorded = result.turns[0].tool_calls[0].envelope
     assert recorded["value"][0]["text"] == raw_text
+
+
+# --- Oturum geçmişi (spec: 2026-10-30-…-design.md › A) ---
+
+GECMIS = [
+    {
+        "question": "Gelenleri grafikle göster",
+        "answer": "Hangi tür?",
+        "tool_calls": [{"name": "get_chart_data", "input": {"group_by": "airline"}}],
+    },
+    {"question": "Pasta", "answer": "Çizdim.", "tool_calls": []},
+]
+
+
+def run_with_history(history, responses=None):
+    client = FakeClient(responses or [model_message("end_turn", text_block(ANSWER))])
+    result = load_agent().run_agent(QUESTION, client=client, history=history)
+    return result, client
+
+
+@pytest.mark.parametrize("history", [None, []])
+def test_gecmis_yoksa_ilk_istek_degismez(history):
+    _, client = run_with_history(history)
+
+    assert client.requests[0]["messages"] == [{"role": "user", "content": QUESTION}]
+
+
+def test_gecmis_bu_sorudan_once_metin_turlari_olarak_gider():
+    _, client = run_with_history(GECMIS)
+
+    messages = client.requests[0]["messages"]
+    assert [m["role"] for m in messages] == [
+        "user",
+        "assistant",
+        "user",
+        "assistant",
+        "user",
+    ]
+    assert messages[-1] == {"role": "user", "content": QUESTION}
+    # Geçmiş mesajlarında blok yok: tool_use/tool_result geçmişe taşınmaz.
+    assert all(isinstance(m["content"], str) for m in messages)
+
+
+def test_gecmis_arac_notunu_asistan_metnine_ekler():
+    _, client = run_with_history(GECMIS)
+
+    assistant = client.requests[0]["messages"][1]["content"]
+    assert assistant.startswith("Hangi tür?")
+    assert "[Önceki turda çağrılan araçlar: get_chart_data " in assistant
+
+
+def test_gecmis_sonraki_turlarin_mesaj_dizisini_bozmaz():
+    first = model_message(
+        "tool_use", tool_use_block("get_flight_summary", {"direction": "all"})
+    )
+    second = model_message("end_turn", text_block(ANSWER))
+
+    _, client = run_with_history(GECMIS, [first, second])
+
+    messages = client.requests[1]["messages"]
+    assert [m["role"] for m in messages] == [
+        "user",
+        "assistant",
+        "user",
+        "assistant",
+        "user",
+        "assistant",
+        "user",
+    ]
+    assert messages[4] == {"role": "user", "content": QUESTION}
+    assert messages[6]["content"][0]["type"] == "tool_result"

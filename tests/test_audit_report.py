@@ -501,3 +501,18 @@ def test_bos_liste_isaretli_sayilmaz(run, write):
     _, out, _ = run("--isaretli")
 
     assert short(1) not in out
+
+
+def test_oturum_alanli_ve_alansiz_satirlar_birlikte_okunur(run, write):
+    # Eski satırda session_id/turn_index yoktur; yenisinde vardır. Rapor ikisini de okur.
+    new = question(2, ts(20, 10), "Yeni soru") | {
+        "session_id": "b" * 32,
+        "turn_index": 2,
+    }
+    write(question(1, ts(20, 9), "Eski soru"), new)
+
+    code, out, err = run()
+
+    assert code == 0, err
+    assert short(1) in out
+    assert short(2) in out
