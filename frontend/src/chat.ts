@@ -1,5 +1,5 @@
 // POST /chat istemcisi. Yanıt SSE akışıdır; olaylar docs/chat.md › Olay tipleri'ndedir:
-// tool_call, source_chip, kpi_card, selection_card, map_command, text_delta, citation,
+// tool_call, source_chip, kpi_card, chart_card, selection_card, map_command, text_delta, citation,
 // ardından done ya da error. EventSource POST desteklemediği için gövde fetch akışından okunup olaylar
 // burada ayrıştırılır. Olay verisi olduğu gibi iletilir; yeniden hesaplanmaz.
 
@@ -35,6 +35,30 @@ export interface KpiItem {
 export interface KpiCard {
   tool: string
   items: KpiItem[]
+  source: string
+  as_of: string | null
+}
+
+export const CHART_TYPES = ['bar_horizontal', 'bar_vertical', 'pie', 'line'] as const
+export type ChartType = (typeof CHART_TYPES)[number]
+
+export interface ChartItem {
+  label: string
+  value: number
+}
+
+// get_chart_data zarfı olduğu gibi (docs/chat.md › chart_card); noktaları sunucu hesaplar.
+export interface ChartCard {
+  tool: string
+  chart_type: ChartType
+  group_by: string
+  metric: string
+  date: string
+  flights: number
+  groups_total: number
+  unclassified: number
+  items: ChartItem[]
+  filters: Record<string, unknown>
   source: string
   as_of: string | null
 }
@@ -91,6 +115,7 @@ export interface ChatHandlers {
   onToolCall: (call: ToolCall) => void
   onChip: (chip: SourceChip) => void
   onKpi: (card: KpiCard) => void
+  onChart: (card: ChartCard) => void
   onSelection: (card: SelectionCard) => void
   onMapCommand: (command: MapCommand) => void
   onText: (text: string) => void
@@ -167,6 +192,28 @@ function isKpi(data: Record<string, unknown>): data is Record<string, unknown> &
     isString(data.tool) &&
     Array.isArray(data.items) &&
     data.items.every(isKpiItem) &&
+    isString(data.source) &&
+    isNullableString(data.as_of)
+  )
+}
+
+function isChartItem(item: unknown): item is ChartItem {
+  return isRecord(item) && isString(item.label) && typeof item.value === 'number'
+}
+
+function isChart(data: Record<string, unknown>): data is Record<string, unknown> & ChartCard {
+  return (
+    isString(data.tool) &&
+    (CHART_TYPES as readonly string[]).includes(data.chart_type as string) &&
+    isString(data.group_by) &&
+    isString(data.metric) &&
+    isString(data.date) &&
+    typeof data.flights === 'number' &&
+    typeof data.groups_total === 'number' &&
+    typeof data.unclassified === 'number' &&
+    Array.isArray(data.items) &&
+    data.items.every(isChartItem) &&
+    isRecord(data.filters) &&
     isString(data.source) &&
     isNullableString(data.as_of)
   )
@@ -268,6 +315,9 @@ export function dispatch(event: SseEvent, handlers: ChatHandlers): boolean {
       return false
     case 'kpi_card':
       if (data !== null && isKpi(data)) handlers.onKpi(data)
+      return false
+    case 'chart_card':
+      if (data !== null && isChart(data)) handlers.onChart(data)
       return false
     case 'selection_card':
       if (data !== null && isSelection(data)) handlers.onSelection(data)

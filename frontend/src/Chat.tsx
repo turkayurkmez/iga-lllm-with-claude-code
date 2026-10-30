@@ -9,6 +9,7 @@ import {
   sendFeedback,
   streamChat,
   type Candidate,
+  type ChartCard,
   type Citation,
   type Done,
   type KpiCard,
@@ -16,6 +17,7 @@ import {
   type SelectionCard,
   type SourceChip,
 } from './chat'
+import { Chart } from './Chart'
 import { MapBanner, MapView, useMapData, type FocusRequest, type Highlight } from './Map'
 
 interface Turn {
@@ -29,6 +31,7 @@ interface Turn {
   citations: Citation[]
   chips: SourceChip[]
   kpis: KpiCard[]
+  charts: ChartCard[]
   selections: SelectionCard[]
   answer: string
   done: Done | null
@@ -237,6 +240,7 @@ function Chat() {
         citations: [],
         chips: [],
         kpis: [],
+        charts: [],
         selections: [],
         answer: '',
         done: null,
@@ -272,6 +276,7 @@ function Chat() {
       },
       onChip: (chip) => update(id, (turn) => ({ chips: [...turn.chips, chip] })),
       onKpi: (card) => update(id, (turn) => ({ kpis: [...turn.kpis, card] })),
+      onChart: (card) => update(id, (turn) => ({ charts: [...turn.charts, card] })),
       onSelection: (card) =>
         update(id, (turn) => ({ selections: [...turn.selections, card] })),
       onText: (text) => update(id, (turn) => ({ answer: turn.answer + text })),
@@ -337,6 +342,8 @@ function Chat() {
                 )}
                 {turn.error !== null && <p className="notice warn">{turn.error}</p>}
                 {showCards && turn.kpis.map((card, index) => <Kpi key={index} card={card} />)}
+                {showCards &&
+                  turn.charts.map((card, index) => <Chart key={index} card={card} />)}
                 {showCards &&
                   turn.selections.map((card, index) => (
                     <Selection

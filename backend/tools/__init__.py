@@ -25,6 +25,7 @@ from backend.tools._ortak import (
     args_model,
     load_contract,
 )
+from backend.tools.get_chart_data import check_chart, get_chart_data
 from backend.tools.get_flight_details import get_flight_details
 from backend.tools.get_flight_summary import get_flight_summary
 from backend.tools.harita import (
@@ -49,12 +50,14 @@ IMPLEMENTATIONS: dict[str, Callable[..., dict]] = {
     "focus_map_object": focus_map_object,
     "highlight_map_set": highlight_map_set,
     "search_documents": search_documents,
+    "get_chart_data": get_chart_data,
 }
 
 # Şemanın anlatamadığı argüman kuralları (yalnızca olan tool'lar).
 ARG_CHECKS: dict[str, Callable[[dict], str | None]] = {
     "focus_map_object": check_focus,
     "highlight_map_set": check_highlight,
+    "get_chart_data": check_chart,
 }
 
 

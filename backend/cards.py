@@ -1,4 +1,4 @@
-"""Tool zarfından /chat olayları: source_chip, kpi_card, selection_card, map_command.
+"""Tool zarfından /chat olayları: source_chip, kpi_card, chart_card, selection_card, map_command.
 
 Sözleşme docs/chat.md › Olay tipleri ve Kod garantileri'ndedir. Kartlar yalnızca
 zarftan (ve kpi_card açıklamaları kontrattan) kurulur; zarf yorumlanmaz: hesap,
@@ -12,6 +12,7 @@ from backend.tools._ortak import load_contract
 
 SUMMARY_TOOL = "get_flight_summary"
 SEARCH_TOOL = "search_documents"
+CHART_TOOL = "get_chart_data"
 # Etiket biçimi search_documents kontratındaki chunk_id desenidir: [D03#02].
 CITATION_TAG = re.compile(r"\[(D\d{2}#\d{2,})\]")
 CITATION_DOCUMENT_FIELDS = ("title", "section", "revision", "effective_from", "status")
@@ -50,6 +51,19 @@ def kpi_card(name: str, envelope: dict) -> dict | None:
     return {
         "tool": name,
         "items": items,
+        "source": envelope["source"],
+        "as_of": envelope["as_of"],
+    }
+
+
+def chart_card(name: str, envelope: dict) -> dict | None:
+    """Başarılı get_chart_data zarfı: tarif, noktalar ve süzgeç, olduğu gibi."""
+    if name != CHART_TOOL or envelope["error"] is not None:
+        return None
+    return {
+        "tool": name,
+        **envelope["value"],
+        "filters": envelope["filters"],
         "source": envelope["source"],
         "as_of": envelope["as_of"],
     }
@@ -119,6 +133,9 @@ class CardBuilder:
         kpi = kpi_card(name, envelope)
         if kpi is not None:
             events.append(("kpi_card", kpi))
+        chart = chart_card(name, envelope)
+        if chart is not None:
+            events.append(("chart_card", chart))
         selection = selection_card(envelope)
         if selection is not None:
             events.append(("selection_card", selection))

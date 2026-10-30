@@ -25,6 +25,7 @@ TOOL_NAMES = (
     "focus_map_object",
     "highlight_map_set",
     "search_documents",
+    "get_chart_data",
 )
 
 

@@ -503,3 +503,12 @@ main.chat-page {
 .map .plane.stale circle {
   stroke-dasharray: 3 2;
 }
+
+.chart-card {
+  margin: 0.75rem 0;
+}
+
+.chart-canvas {
+  width: 100%;
+  height: 320px;
+}

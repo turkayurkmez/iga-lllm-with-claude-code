@@ -1,6 +1,6 @@
 # Uçuş tool'ları: sözleşme
 
-Bu belge `get_flight_summary`, `resolve_flight_identity` ve `get_flight_details` tool'larının sözleşmesidir. Kod `backend/tools/` paketindedir (`__init__.py` giriş noktaları, `_ortak.py` ortak parçalar); sözleşme testleri koddan önce yazılır ve gevşetilmez. Tool çıktıları `docs/zarf.md`'deki ortak zarfla döner.
+Bu belge `get_flight_summary`, `resolve_flight_identity`, `get_flight_details` ve `get_chart_data` tool'larının sözleşmesidir. Kod `backend/tools/` paketindedir (`__init__.py` giriş noktaları, `_ortak.py` ortak parçalar); sözleşme testleri koddan önce yazılır ve gevşetilmez. Tool çıktıları `docs/zarf.md`'deki ortak zarfla döner.
 
 ## Ortak kurallar
 
@@ -231,6 +231,32 @@ Tek bir uçuşun kaydını, hareketini, gecikmesini ve son konumunu döndürür.
 | `missing_field`: `movements.*` ya da `delays.*` alanı yok | O alan `value`'da yok; diğer alanlar durur | Alanın veride bulunmadığını söyler; diğer alanlarla yanıt verir. |
 | `duplicate_callsign` uygulanmış veri | Etkisi yok; arama `flight_id` ile yapılır | Normal yanıt verir. |
 | `COPILOT_DATA` tanımsız, boş, dosya yok ya da JSON bozuk | Veri hatası: `SCHEMA_VALIDATION_FAILED`, `author: layer`, `source: null` | İsteğin şu an yanıtlanamadığını söyler; yeniden denemez. |
+
+## `get_chart_data`
+
+Uçuşları bir boyuta göre gruplayıp ölçen grafik verisi. Sohbette "…grafiğe dök" türü isteklerin tek tool'udur (sözleşme `backend/tools/contracts/get_chart_data.json`, testleri `tests/test_chart.py`). Model grafiğin **tarifini** verir (tür, boyut, ölçü, süzgeç); noktaları tool hesaplar. Model seri yazmaz, toplam çıkarmaz (CLAUDE.md › Yasaklar). Zarftan `chart_card` olayı kurulur (`docs/chat.md`).
+
+### Girdi
+
+| Alan | Zorunlu | Değerler | Varsayılan |
+|---|---|---|---|
+| `chart_type` | evet | `bar_horizontal`, `bar_vertical`, `pie`, `line` | — |
+| `group_by` | evet | `airline`, `aircraft_type`, `origin`, `destination`, `stand`, `gate`, `hour`, `status` | — |
+| `metric` | hayır | `count`, `total_delay_minutes`, `avg_delay_minutes` | `count` |
+| `direction` | hayır | `all`, `arrival`, `departure` | `all` |
+| `include_cancelled` | hayır | `true`, `false` | `true` |
+| `limit` | hayır | `5`, `10`, `20` | `10` |
+
+- `chart_type` kullanıcıdan gelir. Belirtmediyse model tool'u çağırmadan türü sorar; kural tool açıklamasındadır, talimat metni değişmedi.
+- `line` yalnızca `group_by` `hour` ile geçerlidir (şemanın anlatamadığı kural; ihlal `SCHEMA_VALIDATION_FAILED`, author `layer`).
+- `airline` sefer numarasının ilk iki karakteridir; veride havayolu tablosu olmadığı için ad üretilmez. `origin`/`destination` kayıttaki IATA koddur (yerel havalimanı `XXXX`). `hour` `scheduled_time`'ın saat dilimidir (`"14"`). `status`: `cancelled`, `delayed` (gecikme kaydı var), `on_time`.
+- Gecikme ölçüleri yalnızca gecikme kaydı olan uçuşlardan hesaplanır; gecikmeli uçuşu olmayan grup grafikte yer almaz. Ortalama bir ondalığa yuvarlanır.
+
+### `value`
+
+`date`, `chart_type`, `group_by`, `metric` (doğrulanmış argümanlar), `flights` (süzgeçten geçen uçuş), `groups_total`, `unclassified` (boyutu kayıtta olmayan, hiçbir gruba girmeyen uçuş; ör. iptal edilen uçuşun stand'i yoktur) ve `items` (`{label, value}`). Sıra: `hour` saat artan, `status` iptal–gecikmeli–zamanında, diğerleri değer azalan, eşitlikte etiket artan. `limit` `hour` ve `status` dışında en büyük grupları tutar; `groups_total` kesilmeden önceki sayıdır.
+
+Örnek (`seed42-2026-10-20`, `{"chart_type": "bar_horizontal", "group_by": "airline", "direction": "arrival"}`): `flights` 300, `items` `TK` 154, `AJ` 34, `QR` 25, `PC` 23, `AF` 15, `KL` 13, `LX` 13, `BA` 10, `LH` 7, `EK` 6.
 
 ## Örnek akış
 

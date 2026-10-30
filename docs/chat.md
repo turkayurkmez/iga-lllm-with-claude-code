@@ -35,6 +35,7 @@ Alan adları `AgentResult` ile aynıdır (`docs/agent.md` › Sonuç). Tablo kap
 | `tool_call` | Döngü bir tool'u çalıştıracakken, çalıştırmadan önce | `{"id": "...", "name": "...", "input": {...}}` |
 | `source_chip` | Kaynağı olan her tool sonucundan sonra (Kod garantileri 3) | `{"tool": "...", "source": "...", "as_of": "...", "stale": false, "error_code": null}` |
 | `kpi_card` | `get_flight_summary` zarfında `error` `null` ise | `{"tool": "...", "items": [{"field": "...", "description": "...", "value": 0}], "source": "...", "as_of": "..."}` |
+| `chart_card` | `get_chart_data` zarfında `error` `null` ise (`docs/tools.md` › `get_chart_data`) | `{"tool": "get_chart_data", "chart_type": "...", "group_by": "...", "metric": "...", "date": "...", "flights": 0, "groups_total": 0, "unclassified": 0, "items": [{"label": "...", "value": 0}], "filters": {...}, "source": "...", "as_of": "..."}` |
 | `selection_card` | Zarf `AMBIGUOUS_ENTITY` ise | `{"query": "...", "message": "...", "candidates": [<aday>, ...], "source": "...", "as_of": "..."}` |
 | `map_command` | `focus_map_object` ya da `highlight_map_set` zarfında `error` `null` ise (`docs/harita.md` › `map_command` olayı) | Zarfın `value`'su olduğu gibi: `{"command": "...", "object_type": "...", "id": "..."}` ya da `{"command": "...", "object_type": "...", "ids": ["..."]}` |
 | `text_delta` | Döngü `tamam` ile bitince, nihai cevabın metni | `{"text": "..."}` |
@@ -43,6 +44,7 @@ Alan adları `AgentResult` ile aynıdır (`docs/agent.md` › Sonuç). Tablo kap
 | `done` | Döngü beş bitiş durumundan biriyle bitti | `{"status": "...", "reason": null, "turns": 0, "instruction": {"name": "...", "version": "...", "summary": "..."}, "audit_id": "..."}` |
 
 - `tool_call.id`, `name`, `input`: `turns[].tool_calls[]`'taki aynı alanlar, olduğu gibi.
+- `chart_card`: zarfın `value`'su olduğu gibi (`items` dahil) artı `tool`, `filters`, `source`, `as_of`. Noktaları tool hesaplar; kod ve arayüz toplam, yüzde ya da sıralama türetmez.
 - `selection_card`: `query` zarfın `filters.query`'si, `message` `error.message`'ı, `candidates` `value` dizisinin kendisi (`resolve_flight_identity` › `value_schema`, `flight_id`'ye göre artan).
 - `kpi_card.items`: `value`'daki tamsayı alanlar, kontrattaki `value_schema` sırasıyla (`total`, `cancelled`, `delayed`); `description` kontrattaki alan açıklamasıdır (`backend/tools/contracts/get_flight_summary.json`).
 - `error`: döngü durumlarında `code` `status`'tur, `message` `AgentResult.reason`'dır (`docs/agent.md` › Durumlar'daki metin). Model çağrısı başarısızsa `code` `model_error`, `message` `ERROR_MESSAGE`'dır (`backend/main.py`).
@@ -53,7 +55,7 @@ Alan adları `AgentResult` ile aynıdır (`docs/agent.md` › Sonuç). Tablo kap
 
 Model çağrıları `docs/agent.md`'deki gibi `messages.create`'tir; bir turun metni tur bitip `stop_reason` belli olana kadar tutulur.
 
-Döngü sürerken (tur `tool_use` ile bitti, sınır aşılmadı) bir turda: her tool isteği için, yanıttaki sırayla `tool_call`; sonra her sonuç için (istek sırasıyla) `source_chip` (varsa), ardından varsa `kpi_card`, `selection_card` ya da `map_command`. Sonraki tur aynı biçimde sürer.
+Döngü sürerken (tur `tool_use` ile bitti, sınır aşılmadı) bir turda: her tool isteği için, yanıttaki sırayla `tool_call`; sonra her sonuç için (istek sırasıyla) `source_chip` (varsa), ardından varsa `kpi_card`, `chart_card`, `selection_card` ya da `map_command`. Sonraki tur aynı biçimde sürer.
 
 Döngü bitince:
 
@@ -138,13 +140,15 @@ Eksik alan kuralı (ilke 6'nın ilk yarısı) ve belirsizlik kuralı (ilke 5) v1
 
 `docs/http.md` › Arayüz kuralları'ndaki zarf kuralları burada da geçerlidir.
 
-1. Akış `fetch` ile okunur (POST gövdesi gerekir); çerçeveler `event:` ve `data:` satırlarından ayrıştırılır. Tablodaki dokuz tip dışındaki olay yok sayılır (`map_command`'ı işleyen kod `docs/harita.md` › Arayüz işleyicisi'ndedir; `citation` madde 7'de).
+1. Akış `fetch` ile okunur (POST gövdesi gerekir); çerçeveler `event:` ve `data:` satırlarından ayrıştırılır. Tablodaki on tip dışındaki olay yok sayılır (`map_command`'ı işleyen kod `docs/harita.md` › Arayüz işleyicisi'ndedir; `citation` madde 7'de).
 2. `text_delta` geldiği sırayla eklenir; `tool_call` küçük bir satır (tool adı ve ham `input` gösterilmez; `docs/system-talimat.md` › Cevap metni); çip ve kartlar olay verisini olduğu gibi gösterir. `as_of` `+03:00` saatiyle gösterilir, tarayıcı saatine çevrilmez; yaş hesaplanmaz, `stale` yeniden türetilmez.
 3. Seçim kartındaki bir aday seçilince yeni bir soru gönderilir: orijinal soru ile seçilen adayın `flight_no` ve `registration`'ı, zarftaki yazımıyla. Chat belleği olmadığı için orijinal soru yeni mesajda tekrar edilir.
 4. `error` olayı kullanıcıya `message` alanıyla gösterilir; `code` ve teknik ayrıntı gösterilmez. `error`'dan önce gelen çip ve kartlar cevap sayılmaz.
 5. `tamam` ama `text_delta` yoksa genel bir "Cevap üretilmedi." mesajı gösterilir.
 6. Doğrulama sayfası (`/`, `frontend/src/App.tsx`) değişmez.
 7. `citation` her etiket için bir chip olarak, `source_chip`'lerden önce çizilir (`Chat.tsx` › `Citations`); `error` olan turda gösterilmez (madde 4). Eşleşen chip `[chunk_id] title › section · rev revision · effective_from` alanlarını olduğu gibi yazar; `status` `superseded` ise "ESKİ SÜRÜM" rozeti ekler (durum olaydan okunur, türetilmez). `dogrulandi: false` chip kırmızıdır ve yalnızca kimlikle "doğrulanamadı" der. Turda `search_documents` için `tool_call` geldiyse, döngü `tamam` ile bittiyse ve hiç `citation` gelmediyse tek satırlık uyarı çıkar ("Cevap belge kaynağına atıf yapmıyor; doğrulanamaz."). Uçuş soruları bu uyarıyı almaz. Tool adı yalnızca bu koşul için istemcide sabittir; `atifsiz` kodlanınca uyarı ona bağlanmalıdır (`Kapsam dışı`, Atıf olayı).
+
+8. `chart_card` Apache ECharts ile (`Chart.tsx`) cevabın altında satır içi çizilir: `chart_type` `bar_horizontal`, `bar_vertical`, `pie` ya da `line`. Grafiğin altında aynı noktaların tablosu, kesilme (`groups_total` > `items`) ve `unclassified` notu vardır. Sayılar, sıra ve etiketler olaydan olduğu gibi çizilir; başlıktaki ad eşlemesi yalnızca görünümdür. Grafik türünü kullanıcı belirler; belirtmediyse modelin türü sorması `get_chart_data` açıklamasındadır (talimat sürümü değişmedi).
 
 ## Kapsam dışı
 

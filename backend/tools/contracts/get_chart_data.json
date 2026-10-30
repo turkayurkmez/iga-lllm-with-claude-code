@@ -1,0 +1,119 @@
+{
+  "name": "get_chart_data",
+  "version": "1.0.0",
+  "description": "Günün uçuşlarını bir boyuta göre gruplayıp sayar ya da gecikme süresini toplar ve sohbet ekranında grafik olarak çizilecek veriyi döndürür: chart_type (istenen grafik türü), group_by (gruplama boyutu), metric (ölçü), items (etiket ve sayı çiftleri), flights (kapsamdaki uçuş sayısı), groups_total (toplam grup sayısı) ve unclassified (boyutu veride olmadığı için hiçbir gruba girmeyen uçuş sayısı). Sayılar serviste hesaplanır; günün tamamını kapsar, saate göre süzülmez. Grafiği ekran çizer; sen çizim, sayı ya da toplam üretmezsin.\n\nNe zaman kullanılır: kullanıcı uçuşları bir boyuta göre grafik, çizim ya da görsel olarak görmek istediğinde. group_by değerleri: airline (havayolu kodu), aircraft_type (uçak tipi), origin (kalkış havalimanı), destination (varış havalimanı), stand, gate, hour (planlanan saatin saat dilimi, ör. 14), status (iptal, gecikmeli, zamanında). metric değerleri: count (uçuş sayısı), total_delay_minutes (gecikmeli uçuşların toplam gecikme dakikası), avg_delay_minutes (gecikmeli uçuşların ortalama gecikme dakikası). Örnekler: \"Bugünkü gelen uçuşları hava yolu bazında grafiğe dök\" → {\"chart_type\": \"bar_horizontal\", \"group_by\": \"airline\", \"direction\": \"arrival\"}; \"Saatlere göre kalkışları çizgi grafikle göster\" → {\"chart_type\": \"line\", \"group_by\": \"hour\", \"direction\": \"departure\"}; \"Uçak tiplerine göre gecikmeyi pasta grafikle göster\" → {\"chart_type\": \"pie\", \"group_by\": \"aircraft_type\", \"metric\": \"total_delay_minutes\"}.\n\nchart_type kullanıcının isteğinden gelir, sen seçmezsin. Kullanıcı grafik türünü belirtmediyse bu aracı ÇAĞIRMA; önce hangi türü istediğini sor ve seçenekleri say: yatay çubuk (bar_horizontal), dikey çubuk (bar_vertical), pasta (pie), çizgi (line; yalnızca group_by hour ile). Cevabı aldıktan sonra çağır.\n\nNe zaman KULLANILMAZ: grafik istenmeden yalnızca toplam, iptal ya da gecikme sayısı sorulduğunda (get_flight_summary kullan); tek bir sefer, callsign ya da tescil sorulduğunda; veride olmayan bir boyut ya da ölçü (yolcu sayısı, terminal, gecikme nedeni, birden çok gün, trend) istendiğinde. Bu durumlarda araç çağırmadan, bu grafiğin mevcut verilerle çizilemediğini söyle. Sayıları kendin toplama, çıkarma ya da grafik için kendin seri yazma.",
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "chart_type": {
+        "type": "string",
+        "enum": ["bar_horizontal", "bar_vertical", "pie", "line"],
+        "description": "Grafik türü: bar_horizontal yatay çubuk, bar_vertical dikey çubuk, pie pasta, line çizgi (yalnızca group_by hour ile). Kullanıcının söylediği türü ver; söylemediyse aracı çağırmadan önce sor. Değerler küçük harflidir ve alt çizgilidir.",
+        "examples": ["bar_horizontal", "bar_vertical", "pie", "line"]
+      },
+      "group_by": {
+        "type": "string",
+        "enum": ["airline", "aircraft_type", "origin", "destination", "stand", "gate", "hour", "status"],
+        "description": "Gruplama boyutu. airline: sefer numarasının ilk iki karakteri; aircraft_type: ICAO uçak tipi; origin ve destination: IATA kodu (yerel havalimanı XXXX görünür); stand ve gate: hareket kaydındaki kod; hour: planlanan saatin saat dilimi; status: cancelled, delayed ya da on_time.",
+        "examples": ["airline", "hour", "status"]
+      },
+      "metric": {
+        "type": "string",
+        "enum": ["count", "total_delay_minutes", "avg_delay_minutes"],
+        "default": "count",
+        "description": "Ölçü. count: uçuş sayısı. total_delay_minutes ve avg_delay_minutes: yalnızca gecikme kaydı olan uçuşlar üzerinden toplam ve ortalama dakika; gecikmeli uçuşu olmayan grup grafikte yer almaz. Kullanıcı ölçü belirtmediyse count ver.",
+        "examples": ["count", "total_delay_minutes"]
+      },
+      "direction": {
+        "type": "string",
+        "enum": ["all", "arrival", "departure"],
+        "default": "all",
+        "description": "all: tüm uçuşlar, arrival: gelen uçuşlar, departure: giden uçuşlar. Kullanıcı yön belirtmediyse all ver.",
+        "examples": ["all", "arrival", "departure"]
+      },
+      "include_cancelled": {
+        "type": "boolean",
+        "default": true,
+        "description": "true: iptal edilen uçuşlar da sayılır; false: iptaller kapsam dışıdır. Kullanıcı iptalleri hariç tutmak istemediyse true ver.",
+        "examples": [true, false]
+      },
+      "limit": {
+        "type": "integer",
+        "enum": [5, 10, 20],
+        "default": 10,
+        "description": "Gösterilecek en büyük grup sayısı (değere göre çoktan aza). hour ve status için yok sayılır, hepsi gösterilir. Kullanıcı belirtmediyse 10 ver.",
+        "examples": [5, 10, 20]
+      }
+    },
+    "required": ["chart_type", "group_by"],
+    "additionalProperties": false
+  },
+  "value_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {
+      "date": {
+        "type": "string",
+        "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+        "description": "Verinin günü (meta.date).",
+        "examples": ["2026-10-20"]
+      },
+      "chart_type": {
+        "type": "string",
+        "enum": ["bar_horizontal", "bar_vertical", "pie", "line"],
+        "description": "Doğrulanmış chart_type argümanı.",
+        "examples": ["bar_horizontal"]
+      },
+      "group_by": {
+        "type": "string",
+        "enum": ["airline", "aircraft_type", "origin", "destination", "stand", "gate", "hour", "status"],
+        "description": "Doğrulanmış group_by argümanı.",
+        "examples": ["airline"]
+      },
+      "metric": {
+        "type": "string",
+        "enum": ["count", "total_delay_minutes", "avg_delay_minutes"],
+        "description": "Doğrulanmış metric argümanı.",
+        "examples": ["count"]
+      },
+      "flights": {
+        "type": "integer",
+        "description": "Yön ve iptal süzgecinden geçen uçuş sayısı; yetim kayıtlar hariç.",
+        "examples": [300]
+      },
+      "groups_total": {
+        "type": "integer",
+        "description": "Süzülen uçuşların oluşturduğu toplam grup sayısı; items bundan kısa olabilir (limit).",
+        "examples": [10]
+      },
+      "unclassified": {
+        "type": "integer",
+        "description": "Kapsamdaki, ama gruplama boyutu kayıtta olmadığı için hiçbir gruba girmeyen uçuş sayısı (ör. iptal edilen uçuşun stand'i yoktur).",
+        "examples": [0]
+      },
+      "items": {
+        "type": "array",
+        "description": "Grafiğin noktaları. hour için saat artan, status için cancelled, delayed, on_time sırasıyla; diğerlerinde değer çoktan aza, eşitlikte etiket artan sırayla.",
+        "items": {
+          "type": "object",
+          "properties": {
+            "label": {
+              "type": "string",
+              "description": "Grubun etiketi (havayolu kodu, uçak tipi, saat dilimi vb.).",
+              "examples": ["TK"]
+            },
+            "value": {
+              "type": "number",
+              "description": "Grubun ölçü değeri: uçuş sayısı, toplam ya da ortalama gecikme dakikası (ortalama bir ondalığa yuvarlanır).",
+              "examples": [154]
+            }
+          },
+          "required": ["label", "value"],
+          "additionalProperties": false
+        }
+      }
+    },
+    "required": ["date", "chart_type", "group_by", "metric", "flights", "groups_total", "unclassified", "items"],
+    "additionalProperties": false
+  }
+}
