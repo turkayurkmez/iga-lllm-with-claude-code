@@ -1,12 +1,13 @@
 """Prompt enjeksiyonu savunması: tarama ve belge sınırlandırması.
 
-Sözleşme docs/enjeksiyon.md'dedir. Bu modül saf fonksiyonlardan oluşur; dosya, ağ ya
-da sistem saati kullanmaz. Kalıplar yalnızca `FINDINGS`'te tanımlanır.
+Sözleşme docs/enjeksiyon.md'dedir. Bu modül saf fonksiyonlardan oluşur; ağ ya da sistem
+saati kullanmaz, tek dosya okuması `load_exceptions`'tadır. Kalıplar yalnızca `FINDINGS`'te tanımlanır.
 """
 
 import copy
 import json
 import re
+from pathlib import Path
 
 SEARCH_TOOL = "search_documents"
 
@@ -74,3 +75,53 @@ def render_tool_result(name: str, envelope: dict) -> str:
     rendered = copy.copy(envelope)
     rendered["value"] = [_fence(chunk) for chunk in value]
     return json.dumps(rendered, ensure_ascii=False)
+
+
+# --- İndeks zamanı tarama (docs/enjeksiyon.md E3) ---------------------------------
+
+EXCEPTIONS_FILE = Path(__file__).resolve().parents[1] / "data" / "korpus_istisna.json"
+SCANNED_CHUNK_FIELDS = ("title", "section", "text")
+
+
+def load_exceptions(path: Path | str = EXCEPTIONS_FILE) -> set[tuple[str, str]]:
+    """Belge sahibinin onayladığı (chunk_id, kod) istisnaları; dosya yoksa boş küme."""
+    path = Path(path)
+    if not path.exists():
+        return set()
+    try:
+        records = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        raise ValueError(f"İstisna dosyası okunamadı: {path.name}") from exc
+    if not isinstance(records, list):
+        raise ValueError("İstisna dosyası bir liste olmalı.")
+    exceptions = set()
+    for record in records:
+        fields = ("chunk_id", "code", "reason")
+        if not isinstance(record, dict) or not all(
+            isinstance(record.get(f), str) and record[f].strip() for f in fields
+        ):
+            raise ValueError("İstisna kaydı chunk_id, code ve dolu reason taşımalı.")
+        exceptions.add((record["chunk_id"], record["code"]))
+    return exceptions
+
+
+def filter_chunks(
+    chunks: list[dict], exceptions: set[tuple[str, str]] | frozenset = frozenset()
+) -> tuple[list[dict], list[dict]]:
+    """Şüpheli parçaları ayırır: (kalanlar, karantina). Sıra korunur.
+
+    Parçanın başlığı, bölümü ve metni taranır; istisnadaki (chunk_id, kod) sayılmaz.
+    """
+    kept, quarantined = [], []
+    for chunk in chunks:
+        codes = {
+            code
+            for field in SCANNED_CHUNK_FIELDS
+            for code in scan_text(chunk.get(field, ""))
+        }
+        codes = sorted(c for c in codes if (chunk["chunk_id"], c) not in exceptions)
+        if codes:
+            quarantined.append({"chunk_id": chunk["chunk_id"], "codes": codes})
+        else:
+            kept.append(chunk)
+    return kept, quarantined

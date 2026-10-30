@@ -12,11 +12,13 @@ import hashlib
 import json
 import os
 import shutil
+import sys
 from pathlib import Path
 from time import sleep
 
 import numpy as np
 
+from backend import injection
 from backend.rag.chunker import chunk_corpus, embedding_text
 from backend.rag.embed import embed_documents
 from backend.rag.loader import CORPUS_DIR, load_corpus
@@ -80,16 +82,28 @@ def build_index(
     index_dir: Path | str = INDEX_DIR,
     client=None,
     model: str | None = None,
+    exceptions_path: Path | str = injection.EXCEPTIONS_FILE,
 ) -> dict:
     """İndeksi kurar ve `meta.json` içeriğini döndürür.
 
     Hata durumunda (`CorpusError`, `EmbedError`, `EmbedConfigError`, `OSError`)
     var olan indeks olduğu gibi kalır. `client`/`model` verilmezse gömme katmanı
-    `.env`'den kurar (backend/rag/embed.py).
+    `.env`'den kurar (backend/rag/embed.py). Şüpheli parçalar (docs/enjeksiyon.md E3)
+    indekse alınmaz; `meta["quarantined"]`'a yazılır, bulgu yoksa alan eklenmez.
     """
     corpus_dir, index_dir = Path(corpus_dir), Path(index_dir)
 
-    chunks = chunk_corpus(load_corpus(corpus_dir))
+    chunks, quarantined = injection.filter_chunks(
+        chunk_corpus(load_corpus(corpus_dir)),
+        injection.load_exceptions(exceptions_path),
+    )
+    for item in quarantined:
+        print(
+            f"Uyarı: {item['chunk_id']} karantinada: {', '.join(item['codes'])}",
+            file=sys.stderr,
+        )
+    if not chunks:
+        raise ValueError("Tüm parçalar karantinaya alındı; indeks kurulmadı.")
     result = embed_documents(
         [embedding_text(chunk) for chunk in chunks], client=client, model=model
     )
@@ -106,6 +120,8 @@ def build_index(
     }
     if meta["total_tokens"] is None:
         del meta["total_tokens"]
+    if quarantined:
+        meta["quarantined"] = quarantined
 
     staging = index_dir.with_name(index_dir.name + ".yeni")
     if staging.exists():
