@@ -18,6 +18,9 @@ numpy==2.5.4
 # Canlı konum akışı (MQTT, docs/canli_akis.md)
 paho-mqtt==2.1.0
 
+# MCP sunucusu (docs/mcp.md)
+mcp==1.30.0
+
 # Veritabanı (PostgreSQL)
 sqlalchemy==2.1.5
 asyncpg==0.32.0
