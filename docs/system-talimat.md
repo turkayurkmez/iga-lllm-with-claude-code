@@ -115,7 +115,7 @@ Bugün 600 uçuş var; 4'ü iptal, 115'i gecikmeli. Kaynak: data/referans/seed42
 - Tool açıklamaları ve şemaları: `docs/tools.md` ve `backend/tools/contracts/`. Talimat tool'un ne yaptığını tekrar etmez.
 - Agent döngüsünün sınırları ve bitiş durumları: `docs/agent.md`. Talimat `status` üretmez, sınır değeri söylemez.
 - `/chat`'in agent döngüsüne bağlanması ve SSE olayları: `docs/chat.md`. Akışa göre yazılan talimat v2'nin ilkeleri de oradadır (`docs/chat.md` › Talimat v2).
-- Konuşma geçmişi ve çok turlu sohbet: her istek tek sorudur (`docs/sorumluluk-zinciri.md` › Açık soru 1).
+- Geçmişin saklanması: `v5` geçmişe nasıl davranılacağını söyler, geçmişi sunucu tutar (`docs/chat.md` › Oturum).
 - Rol bazlı ya da kullanıcıya göre değişen talimat: tek talimat vardır (`docs/spec.md` §1: rol ve kimlik kapsam dışı).
 - Yapılandırılmış çıktı (JSON cevap) ve servis tarafı cevap doğrulaması: Cevap yapısı şimdilik talimatla istenir; garanti altına alınması açık sorudur (`docs/sorumluluk-zinciri.md` › Açık soru 3).
 - Sıcaklık ve model seçimi: talimatın konusu değildir (CLAUDE.md › Kurallar).

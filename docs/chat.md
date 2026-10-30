@@ -4,7 +4,9 @@
 
 ## Uç
 
-`POST /chat`, gövde `{"message": "..."}` ya da haritada seçili nesneyle `{"message": "...", "selected": {"object_type": "flight", "id": "TK2345"}}` (`selected` isteğe bağlıdır; sözleşmesi `docs/harita.md` › Haritadan sohbete bağlam). Cevap `text/event-stream; charset=utf-8`. Chat belleği yoktur: her istek tek, kendi kendine yeten bir sorudur.
+`POST /chat`, gövde `{"message": "..."}` ya da haritada seçili nesneyle `{"message": "...", "selected": {"object_type": "flight", "id": "TK2345"}}` (`selected` isteğe bağlıdır; sözleşmesi `docs/harita.md` › Haritadan sohbete bağlam). Cevap `text/event-stream; charset=utf-8`. Konuşma geçmişini **sunucu** tutar (oturum, aşağıda › Oturum); istemci geçmiş gönderemez.
+
+Gövdeye isteğe bağlı `"session_id": "<32 hex>"` eklenebilir. Yoksa ya da sunucuda bulunamıyorsa (süre doldu, sunucu yeniden başladı) yeni oturum açılır; bu hata değildir ve `done` olayında bildirilir. Biçimsiz `session_id` ve tabloda olmayan her gövde alanı (ör. `history`) 422 verir.
 
 Akış başlamadan önceki hatalar HTTP durum koduyla döner, olay üretilmez, model çağrılmaz:
 
@@ -12,6 +14,7 @@ Akış başlamadan önceki hatalar HTTP durum koduyla döner, olay üretilmez, m
 |---|---|---|
 | Mesaj boş ya da yalnızca boşluk | `422` | FastAPI doğrulama gövdesi |
 | Mesaj kırpıldıktan sonra 2000 karakterden (kod noktası) uzun (`backend/main.py` › `MAX_MESSAGE_CHARS`; `docs/enjeksiyon.md` E4) | `422` | FastAPI doğrulama gövdesi |
+| `session_id` biçimsiz (32 küçük harfli hex değil, açık olmayan tür) ya da gövdede tanımsız alan | `422` | FastAPI doğrulama gövdesi |
 | `selected` yanlış biçimli (açık `null`, bilinmeyen `object_type`, `object_type`'a uymayan `id`, fazla alan) | `422` | FastAPI doğrulama gövdesi |
 | `selected` nesnesi veride yok (`docs/harita.md` › Haritadan sohbete bağlam) | `422` | `{"detail": [{"type": "value_error", "loc": ["body", "selected"], "msg": "..."}]}` |
 | `selected` doğrulanırken veri okunamadı | `503` | `{"detail": SELECTED_UNAVAILABLE_MESSAGE}` (`backend/main.py`) |
@@ -41,7 +44,7 @@ Alan adları `AgentResult` ile aynıdır (`docs/agent.md` › Sonuç). Tablo kap
 | `text_delta` | Döngü `tamam` ile bitince, nihai cevabın metni | `{"text": "..."}` |
 | `citation` | Döngü `tamam` ile bitince, nihai cevapta geçen her ayrık parça etiketi için (Atıf olayı) | Eşleşen etiket: `{"chunk_id": "...", "dogrulandi": true, "title": "...", "section": "...", "revision": "...", "effective_from": "...", "status": "..."}`; eşleşmeyen: `{"chunk_id": "...", "dogrulandi": false}` |
 | `error` | Döngü `tamam` dışı bir durumla bitti ya da model çağrısı başarısız | `{"code": "...", "message": "..."}` |
-| `done` | Döngü beş bitiş durumundan biriyle bitti | `{"status": "...", "reason": null, "turns": 0, "instruction": {"name": "...", "version": "...", "summary": "..."}, "audit_id": "..."}` |
+| `done` | Döngü beş bitiş durumundan biriyle bitti | `{"status": "...", "reason": null, "turns": 0, "instruction": {"name": "...", "version": "...", "summary": "..."}, "audit_id": "...", "session_id": "...", "session_reset": false}` |
 
 - `tool_call.id`, `name`, `input`: `turns[].tool_calls[]`'taki aynı alanlar, olduğu gibi.
 - `chart_card`: zarfın `value`'su olduğu gibi (`items` dahil) artı `tool`, `filters`, `source`, `as_of`. Noktaları tool hesaplar; kod ve arayüz toplam, yüzde ya da sıralama türetmez.
@@ -49,7 +52,7 @@ Alan adları `AgentResult` ile aynıdır (`docs/agent.md` › Sonuç). Tablo kap
 - `kpi_card.items`: `value`'daki tamsayı alanlar, kontrattaki `value_schema` sırasıyla (`total`, `cancelled`, `delayed`); `description` kontrattaki alan açıklamasıdır (`backend/tools/contracts/get_flight_summary.json`).
 - `error`: döngü durumlarında `code` `status`'tur, `message` `AgentResult.reason`'dır (`docs/agent.md` › Durumlar'daki metin). Model çağrısı başarısızsa `code` `model_error`, `message` `ERROR_MESSAGE`'dır (`backend/main.py`).
 - `citation`: alanların anlamı ve eşleme kuralları aşağıda, Atıf olayı'ndadır.
-- `done`: `status`, `reason`, `instruction` `AgentResult`'tan; `turns` `len(AgentResult.turns)`; `audit_id` bu sorunun audit satırının kimliği; satır akış bittikten sonra yazılır (`docs/audit.md`).
+- `done`: `status`, `reason`, `instruction` `AgentResult`'tan; `turns` `len(AgentResult.turns)`; `audit_id` bu sorunun audit satırının kimliği; satır akış bittikten sonra yazılır (`docs/audit.md`). `session_id` oturumun kimliği (her `done`'da vardır); `session_reset` istek bir `session_id` taşıyıp oturum bulunamadığı için yenisi açıldıysa `true`, aksi halde `false`.
 
 ## Sıra
 
@@ -124,6 +127,15 @@ Senaryolar `docs/bozulma.md`'de; zarf biçimleri `docs/zarf.md` ve `docs/tools.m
 | `missing_field` | Hata yok; alan `value`'da yok (anahtar yok, `null` da değil; `docs/zarf.md` › Eksik alan hata değildir) | Normal çip | "Bu alan için veri yok" der, elindeki diğer bilgiyi verir; değeri türetmez. |
 | `undefined_flight` | `NOT_FOUND`, `value: null`, `filters` dolu | Hata kodlu çip | Aranan değeri ve bulunamadığını söyler; sefer no, callsign ya da tescille yeniden aramayı önerir, benzer kayıt önermez. |
 
+## Oturum
+
+Sözleşmenin kaynağı `docs/superpowers/specs/2026-10-30-chat-gecmisi-ve-genel-grafik-design.md` bölüm A'dır, kod `backend/session.py`'dedir.
+
+- **Ne saklanır:** her `tamam` turun `{question, answer, tool_calls}` kaydı (`tool_calls` yalnızca çalıştırılan çağrıların `name` ve `input`'u). Tool sonuçları, zarflar, kart ve grafik verisi saklanmaz; yeni sayı yalnızca o turun tool çağrısından gelir. `tamam` olmayan tur ve haritadan seçim notu geçmişe girmez. İstemci akışı kesse de döngü sürerse tur tamamlanınca eklenir.
+- **Modele nasıl gider:** önceki turlar, bu mesajdan önce düz metin `user`/`assistant` turları olarak. Çağrılan araçlar asistan metninin sonuna `[Önceki turda çağrılan araçlar: ad {json}; …]` notuyla eklenir; `tool_use`/`tool_result` bloğu geçmişe taşınmaz.
+- **Sınırlar** (`backend/session.py`): modele son 6 tur ve en çok 12000 karakter (eskiden başlayarak tur bölünmeden atılır; tek başına bütçeyi aşan tur hiç gitmez); en çok 100 oturum (en eski kullanılan atılır); oturum başına 20 tur; 2 saat hareketsizlikte oturum dolar.
+- **Talimat:** `v5` (v4 + ilke 14) geçmişe nasıl davranılacağını söyler; varsayılan sürüm değişmedi.
+
 ## Talimat v2
 
 `backend/instructions/v2.md`, `VERSIONS["v2"] = "2.0.0"` (yazıldı; testleri `tests/test_instruction_v2.py`). Etkin sürüm v3'tür: `backend/instructions/v3.md` v2'nin tüm değişikliklerini içerir ve üstüne kaynaklı cevap ilkelerini ekler (`docs/kaynakli.md`). Cevap yapısının bir parçası kalktığı için değişiklik MAJOR'dur; dosya açma, sürüm, Değişiklik günlüğü ve ölçüm kuralları `docs/system-talimat.md` › Versiyonlama'daki gibidir. `/chat` sürümü `default_version()` ile okur; v2'ye geçiş `COPILOT_INSTRUCTION=v2` ile yapılır.
@@ -140,9 +152,9 @@ Eksik alan kuralı (ilke 6'nın ilk yarısı) ve belirsizlik kuralı (ilke 5) v1
 
 `docs/http.md` › Arayüz kuralları'ndaki zarf kuralları burada da geçerlidir.
 
-1. Akış `fetch` ile okunur (POST gövdesi gerekir); çerçeveler `event:` ve `data:` satırlarından ayrıştırılır. Tablodaki on tip dışındaki olay yok sayılır (`map_command`'ı işleyen kod `docs/harita.md` › Arayüz işleyicisi'ndedir; `citation` madde 7'de).
+1. Akış `fetch` ile okunur (POST gövdesi gerekir); çerçeveler `event:` ve `data:` satırlarından ayrıştırılır. Tablodaki on tip dışındaki olay yok sayılır (`map_command`'ı işleyen kod `docs/harita.md` › Arayüz işleyicisi'ndedir; `citation` madde 7'de). Oturum kimliği `done` olayından alınır ve sonraki mesajla gönderilir; "Yeni konuşma" kimliği bırakır ve ekrandaki turları temizler. `session_reset` `true` ise o turda "Önceki konuşma sıfırlandı; bu soru bağımsız yanıtlandı." notu çıkar.
 2. `text_delta` geldiği sırayla eklenir; `tool_call` küçük bir satır (tool adı ve ham `input` gösterilmez; `docs/system-talimat.md` › Cevap metni); çip ve kartlar olay verisini olduğu gibi gösterir. `as_of` `+03:00` saatiyle gösterilir, tarayıcı saatine çevrilmez; yaş hesaplanmaz, `stale` yeniden türetilmez.
-3. Seçim kartındaki bir aday seçilince yeni bir soru gönderilir: orijinal soru ile seçilen adayın `flight_no` ve `registration`'ı, zarftaki yazımıyla. Chat belleği olmadığı için orijinal soru yeni mesajda tekrar edilir.
+3. Seçim kartındaki bir aday seçilince yeni bir soru gönderilir: orijinal soru ile seçilen adayın `flight_no` ve `registration`'ı, zarftaki yazımıyla. Seçim kartı yeni bir mesaj olduğu ve sunucu yalnızca tamamlanan turları hatırladığı için orijinal soru yeni mesajda yine tekrar edilir.
 4. `error` olayı kullanıcıya `message` alanıyla gösterilir; `code` ve teknik ayrıntı gösterilmez. `error`'dan önce gelen çip ve kartlar cevap sayılmaz.
 5. `tamam` ama `text_delta` yoksa genel bir "Cevap üretilmedi." mesajı gösterilir.
 6. Doğrulama sayfası (`/`, `frontend/src/App.tsx`) değişmez.
@@ -152,7 +164,7 @@ Eksik alan kuralı (ilke 6'nın ilk yarısı) ve belirsizlik kuralı (ilke 5) v1
 
 ## Kapsam dışı
 
-- Konuşma geçmişi (`docs/sorumluluk-zinciri.md` › Açık soru 1).
+- Geçmişin kalıcılığı (disk, veritabanı), çoklu backend örneği ve oturum paylaşımı: oturumlar bellekte tutulur.
 - Canlı metin akışı: cevap tur bitince gelir.
 - Token sayıları: `AgentResult`'ta yoktur; ölçüm `scripts/agent_run.py`'deki istemci sarmalayıcısıyla yapılır.
 - İstemcinin bağlantıyı kesmesiyle döngünün durdurulması (`docs/agent.md` › Kapsam dışı).

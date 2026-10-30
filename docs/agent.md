@@ -6,17 +6,18 @@ Bu belge, operatörün sorusunu modele verip modelin istediği tool'ları çalı
 
 ## Girdi
 
-Döngü tek bir fonksiyondur: `backend.agent.run_agent(question, client=None, instruction_version=None) -> AgentResult`. Senkron çalışır.
+Döngü tek bir fonksiyondur: `backend.agent.run_agent(question, client=None, instruction_version=None, history=None) -> AgentResult`. Senkron çalışır.
 
 | Alan | Tür | Zorunlu | Açıklama |
 |---|---|---|---|
 | `question` | metin | evet | Operatörün sorusu, olduğu gibi. Kırpılmaz, yeniden yazılmaz; modele ilk `user` mesajı olarak gider. |
 | `client` | senkron Anthropic istemcisi | hayır | Model çağrıları `client.messages.create(**istek)` ile yapılır. Verilmezse `backend.llm.client` kullanılır. Testler buraya sahte istemci verir. |
+| `history` | liste | hayır | Önceki turlar (`backend.session.HistoryTurn`: `question`, `answer`, `tool_calls`); yalnızca sunucunun kendi sakladığı turlardır. `question` bu turlardan sonra gelir; her tur modele düz metin `user`/`assistant` mesajı olarak gider, araç çağrıları asistan metninin sonuna not olarak eklenir. Verilmezse ya da boşsa istek geçmişsiz davranışla aynıdır. |
 | `instruction_version` | metin | hayır | System talimatının sürüm dosyası adı (`backend/instructions/<ad>.md`; `docs/system-talimat.md` › Versiyonlama). Verilmezse `backend.instructions.default_version()`: ortamdaki `COPILOT_INSTRUCTION`, boşsa `v3`. Ortam, `backend.llm` `.env`'yi yükledikten sonra okunur. |
 
 - Boş ya da yalnızca boşluktan oluşan soru reddedilir: `ValueError` fırlar, döngü başlamaz, API çağrısı yapılmaz.
 - Kayıtlı olmayan sürüm (`backend.instructions.VERSIONS`'ta yok) reddedilir: `"Bilinmeyen talimat sürümü"` ile başlayan `ValueError` fırlar, API çağrısı yapılmaz. Sürüm parametreyle verildiyse `backend.llm` de yüklenmez; ortamdan geldiyse hata `.env` yüklendikten sonra, ilk model çağrısından önce fırlar. Parametre ortamın önüne geçer.
-- Her çağrı sıfırdan başlar; konuşma geçmişi girdi değildir (bkz. Kapsam dışı).
+- Çağrı kendi içinde durumsuzdur: geçmiş yalnızca `history` ile gelir, döngü ayrıca durum tutmaz. Geçmişi `/chat` oturum deposundan verir (`docs/chat.md` › Oturum).
 - Modele giden istek: `model=backend.llm.MODEL`, `system=backend.instructions.load(instruction_version)` (varsayılanda `backend.prompts.SYSTEM_INSTRUCTIONS` ile aynı metin), `tools=tool_definitions()`, `max_tokens=16000`. Sıcaklık gönderilmez.
 
 ## Sonuç
@@ -152,7 +153,7 @@ Aynı soruda model `{"direction": "ALL"}`'u üç kez isterse: 1. ve 2. turda ça
 
 - `/chat` entegrasyonu ve SSE olayları: sonucun akışa nasıl yansıyacağı `docs/chat.md`'dedir. `/chat` döngüyü `run_agent` ile, model çağrılarını saran bir istemci vererek kullanır; döngünün kendisi bu belgedeki gibidir.
 - Akış (streaming): döngü her turda tam yanıtı bekler; ara metin parçaları dışarı verilmez.
-- Konuşma geçmişi ve çok turlu sohbet: her `run_agent` tek sorudur, durum tutmaz.
+- Geçmişin saklanması: `run_agent` geçmişi yalnızca girdi olarak alır; depo `backend/session.py`'dedir.
 - Dış iptal (istemcinin bağlantıyı kesmesi, zaman aşımı): `durduruldu` yalnızca modelin `stop_reason`'ından doğar.
 - Sistem talimatı değişikliği: `SYSTEM_INSTRUCTIONS` şu an "canlı veriye erişimin yok" der; tool'larla uyumlu hale getirilmesi ayrı iştir.
 - Paralel tool çalıştırma: aynı turdaki çağrılar sırayla çalışır.
