@@ -408,7 +408,8 @@ def test_supheli_parca_indekse_girmez(corpus, index_dir):
 
     chunks = json.loads((index_dir / "chunks.json").read_text(encoding="utf-8"))
     assert all(c["chunk_id"] not in ids for c in chunks)
-    assert meta["quarantined"] == [{"chunk_id": i, "codes": ["yok_say"]} for i in ids]
+    codes = ["asistana_emir", "yok_say"]
+    assert meta["quarantined"] == [{"chunk_id": i, "codes": codes} for i in ids]
     assert json.loads((index_dir / "meta.json").read_text("utf-8"))["quarantined"]
     vectors = np.load(index_dir / "vektorler.npy")
     assert len(vectors) == meta["chunk_count"] == len(chunks)
@@ -448,7 +449,11 @@ def test_istisna_dosyasi_parcayi_geri_getirir(corpus, index_dir, tmp_path):
     exceptions = tmp_path / "istisna.json"
     exceptions.write_text(
         json.dumps(
-            [{"chunk_id": i, "code": "yok_say", "reason": "Onaylı örnek."} for i in ids]
+            [
+                {"chunk_id": i, "code": code, "reason": "Onaylı örnek."}
+                for i in ids
+                for code in ("yok_say", "asistana_emir")
+            ]
         ),
         encoding="utf-8",
     )
