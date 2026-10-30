@@ -141,12 +141,14 @@ Birleştirme (yetim kayıtlar kullanılmaz, `docs/tools.md` › Veri kaynağı):
 | `group_by` | evet | `{"field": <alan>, "bucket": "hour"\|"half_hour"}`; `bucket` yalnızca zaman alanıyla | — |
 | `series_by` | hayır | `group_by` ile aynı biçim; kategorik alan | yok |
 | `measure` | hayır | `{"agg": "count"\|"sum"\|"avg"\|"min"\|"max", "field": <sayısal alan>}`; `count`'ta `field` yok | `{"agg": "count"}` |
-| `filters` | hayır | `[{"field": <alan>, "op": "eq"\|"ne"\|"in"\|"gt"\|"lt", "value": ...}]` | `[]` |
+| `filters` | hayır | `[{"field": <alan>, "op": "eq"\|"ne"\|"in"\|"gt"\|"ge"\|"lt"\|"le", "value": ...}]` | `[]` |
 | `sort` | hayır | `value_desc`, `value_asc`, `label` | `value_desc` (zaman bucket'ı varsa `label`) |
 | `limit` | hayır | `5`, `10`, `20`, `50` | `10` |
+| `derive` | hayır | `"pct_change_vs_previous"` (yalnızca `group_by` zaman kovasıyla) | yok |
+| `plot` | hayır | `"value"`, `"change_pct"` | `"value"` |
 
 - Kontrat kuralı (CLAUDE.md): her object `additionalProperties: false`; `minLength`/`maxLength`/`minimum`/`maximum`/`multipleOf` kullanılmaz, biçim `pattern`/`enum` ile.
-- `filters[].value`: `eq`/`ne`/`gt`/`lt` için tek değer (metin, sayı ya da mantıksal); `in` için en az bir öğeli dizi (en çok 20 öğe, `maxItems` yasağı nedeniyle kodda denetlenir). `gt`/`lt` yalnızca sayısal ve zaman alanlarında; zaman alanlarında değer ISO 8601 `+03:00` metni, karşılaştırma kronolojiktir.
+- `filters[].value`: `eq`/`ne`/`gt`/`lt` için tek değer (metin, sayı ya da mantıksal); `in` için en az bir öğeli dizi (en çok 20 öğe, `maxItems` yasağı nedeniyle kodda denetlenir). `gt`/`ge`/`lt`/`le` yalnızca sayısal ve zaman alanlarında. Zaman alanlarında değer iki biçimden biridir: (a) ISO 8601 zaman (saat dilimi zorunlu; karşılaştırma kronolojik) ya da (b) tarihsiz `"HH:MM"` (`^([01]\d|2[0-3]):[0-5]\d$`; kaydın yerel saat bölümüyle, tarihe bakmadan karşılaştırılır). (b) modelin günün tarihini bilmesini gerektirmez; veri tek günlük olduğu için gün süzgecine gerek yoktur (çok günlü veri kapsam dışıdır). `eq`/`ne`/`in` zaman alanlarında yine yalnızca bu iki biçimle çalışır.
 - `sort` ve `limit` `bucket`'lı (zaman) ve `status` gruplamasında **yok sayılır**: tüm gruplar saat artan sırayla (`status`: `cancelled`, `delayed`, `on_time`) gelir.
 - `series_by` varsa `limit` yalnızca `group_by`'ın kategorilerine uygulanır; seri sayısı en çok 8 (en büyük 8 seri, sırası toplam değere göre, eşitlikte etiket); kalan seriler `series_truncated` sayısına yazılır.
 - Şemanın anlatamadığı kurallar `ARG_CHECKS` ile (ihlal `SCHEMA_VALIDATION_FAILED`, author `layer`, mesaj genel):
@@ -155,7 +157,8 @@ Birleştirme (yetim kayıtlar kullanılmaz, `docs/tools.md` › Veri kaynağı):
   - `pie`/`doughnut`: `series_by` olmaz.
   - `series_by` ≠ `group_by.field`.
   - `sum`/`avg`/`min`/`max`: `field` sayısal alan; `count`: `field` yok.
-  - `gt`/`lt`: alan sayısal ya da zaman; `in`: dizi, diğerleri: dizi değil.
+  - `gt`/`ge`/`lt`/`le`: alan sayısal ya da zaman; `in`: dizi, diğerleri: dizi değil.
+  - `derive` yalnızca `group_by` zaman alanı ve `bucket` ile; `plot` `change_pct` ise `derive` zorunlu ve `chart_type` yalnızca `bar_horizontal`, `bar_vertical`, `grouped_bar`, `line`, `area` olabilir (`pie`, `doughnut`, `stacked_bar`, `heatmap` ile negatif değerler anlamsızdır).
   - `value`'nun türü alana uyar (sayısal alana metin yok vb.).
   - Hücre sayısı (grup × seri) en çok 200.
 
@@ -171,10 +174,13 @@ flights           : süzgeçten geçen uçuş sayısı
 groups_total      : kesilmeden önce grup sayısı
 unclassified      : group_by (ya da series_by) alanı kayıtta olmadığı için gruba girmeyen uçuş
 series_truncated  : kesilen seri sayısı (series_by varsa)
-items             : [{"label": "...", "series"?: "...", "value": sayı}]
+derive            : "pct_change_vs_previous" (yoksa anahtar yok)
+plot              : "value" | "change_pct"
+items             : [{"label": "...", "series"?: "...", "value": sayı, "change_pct"?: sayı, "trend"?: "up"|"down"|"flat"}]
 ```
 
 - `items` düz satırlardır. Sıra: önce grup sırası (yukarıdaki kurallar), grup içinde seri sırası. `series` yalnızca `series_by` varsa vardır.
+- **Türetilmiş değişim (`derive`).** Her `items` satırı için, **aynı seride hemen önceki kova** (saat için bir önceki saat, `half_hour` için bir önceki yarım saat) varsa ve değeri sıfırdan büyükse `change_pct` = (bu − önceki) / önceki × 100 (bir ondalığa yuvarlanır, tek yuvarlama noktası) ve `trend` (`up` ham değer önceki değerden büyükse, `down` küçükse, `flat` eşitse) eklenir. Önceki kova yoksa (o saatte uçuş yok, süzgeç dışında kaldı ya da ilk kova) ya da değeri sıfırsa bu iki alan satıra **hiç yazılmaz**: sıfıra bölme, sonsuz ya da uydurma yüzde olmaz. `plot` `change_pct` ise grafik yalnızca `change_pct` taşıyan satırları çizer; satırın `value`'su (ham sayı) yine `items`'ta ve tabloda vardır.
 - `measure.agg` `avg` ise değer bir ondalığa yuvarlanır (tek yuvarlama noktası, tool içinde); `sum`/`min`/`max` tamsayıdır (`delay_minutes` tamsayı).
 - Gecikme ölçüleri (`delay_minutes` üzerinden) yalnızca gecikme kaydı olan uçuşlardan hesaplanır; gecikmeli uçuşu olmayan hücre `items`'ta yer almaz. `count` bütün süzgeçli uçuşları sayar.
 - Hiçbir hücre boş değerle (`null`) yazılmaz (`docs/tools.md` › Veri kaynağı).
@@ -193,7 +199,8 @@ items             : [{"label": "...", "series"?: "...", "value": sayı}]
   - `pie`/`doughnut`: tek dilim dizisi; ECharts'ın otomatik yüzde etiketi **kapalıdır** (`label.formatter` yalnızca ad, tooltip yalnızca değer).
   - `heatmap`: `group_by` x ekseni, `series_by` y ekseni, `value` renk ölçeği.
 - Grafik başlığı `measure`, `group_by`, `series_by` ve `filters`'tan **görünüm metni** olarak kurulur (ör. "Uçuş sayısı · movement_type · saat"); alan adlarının Türkçe karşılıkları `Chart.tsx`'te yalnızca görünümdür, bilinmeyen kod olduğu gibi gösterilir.
-- Altındaki tablo düz `items` satırlarıdır (denetlenebilirlik); kesilme ve `unclassified` notları bugünkü gibi, `series_truncated` eklenir.
+- `plot` `change_pct` iken çubuk/çizgi `change_pct` değerini çizer; her noktanın etiketi sunucunun verdiği `trend` ve `change_pct`'den kurulur (`▲ 12,5%`, `▼ 3,0%`, `▬ 0,0%`; ondalık ayracı yalnızca görünümdür) ve renk `trend`'e göre seçilir. Arayüz değişimi kendisi hesaplamaz.
+- Altındaki tablo düz `items` satırlarıdır (denetlenebilirlik; `change_pct`/`trend` varsa ek sütun); kesilme ve `unclassified` notları bugünkü gibi, `series_truncated` eklenir.
 
 ### Tool açıklaması
 
@@ -218,6 +225,7 @@ Kural: ne döndürür / ne zaman kullanılır / ne zaman KULLANILMAZ, örnek ve 
 | `tests/test_audit.py` | `session_id` / `turn_index` alanları; eski satırlar okunur. |
 | `tests/test_instruction_v5.py` (yeni) | v5 = v4 + ilke 14; yazım kuralları; günlük; `VERSIONS`. |
 | `tests/test_chart.py` | `FIELDS` ↔ kontrat enum eşitliği; her alan için gruplama; birleştirme (aircraft, stands); `movement_type` iki dilim (300/300); saat × yön yığılmış toplamı; süzgeç `eq`/`ne`/`in`/`gt`/`lt` (sayısal ve zaman); `unclassified`; `series_truncated`; hücre sınırı; tüm `ARG_CHECKS` ihlalleri veriyi okumadan reddedilir; beklenen sayılar test içinde bağımsız hesaplanır (CLAUDE.md: olay/liste üzerinde gezen testte önce türün var olduğu assert edilir). |
+| `tests/test_chart.py` (Q2 kabul testi) | Test günü `2026-10-20` (`COPILOT_DATA` referans dosya, `COPILOT_NOW` aynı gün): "gelen-giden uçuşların 18:00'deki sayısının 17:00'ye göre değişimi" tarifi (`scheduled_time ge "17:00"` ve `lt "19:00"`, `group_by` saat kovası, `series_by movement_type`, `derive pct_change_vs_previous`, `plot change_pct`, `bar_horizontal`) için `items`, dosyadan bağımsız hesaplanan 17 ve 18 sayılarıyla `change_pct`/`trend` değerlerini eşler; 17:00 satırında `change_pct` yoktur. |
 | Frontend | Test çalıştırıcı yok (CLAUDE.md); `chat.ts` doğrulayıcıları `node` ile, `Chart.tsx` tarayıcıda elle denenir. |
 
 Ağ ve ücretli çağrı yok; tüm testler sahte istemciyle çalışır. Gerçek model denemesi (tür sorusu, takip cevabı) bu işin dışındadır; istenirse tek elle deneme olarak ayrıca onaylanır.
@@ -229,6 +237,8 @@ Ağ ve ücretli çağrı yok; tüm testler sahte istemciyle çalışır. Gerçek
 - Geçmiş özetleme/sıkıştırma (token optimizasyonu); yalnızca son 6 tur ve karakter sınırı.
 - Tool sonucu/zarf saklama ve geçmişten yeniden sunma.
 - Radar, ağaç haritası, dağılım grafiği, huni vb. türler (kayıt genişletilebilir tasarlanır, eklenmez).
+- Sırt sırta (butterfly) çubuk düzeni: iki seriyi ortak eksenin iki yanına çizen tür eklenmez; `grouped_bar` aynı yöne çizer.
+- Tarihe göre süzme/çok günlü veri: tarihsiz `"HH:MM"` süzgeci veri tek günlük olduğu sürece geçerlidir.
 - Uçuş listesi dışı veriler (yolcu, stand doluluğu, çok günlü trend) ve başka tool'ların sonuçlarının grafiğe bağlanması.
 - `v5`'e varsayılan geçiş ve enjeksiyon saldırı seti ölçümü (ücretli, ayrı karar).
 - Kalan 3 bilinen kırmızı test (`test_http`, `test_map_tools`, `test_prompts`) ve talimatın harita/grafik tool'larına yetişmesi.
