@@ -234,29 +234,52 @@ Tek bir uçuşun kaydını, hareketini, gecikmesini ve son konumunu döndürür.
 
 ## `get_chart_data`
 
-Uçuşları bir boyuta göre gruplayıp ölçen grafik verisi. Sohbette "…grafiğe dök" türü isteklerin tek tool'udur (sözleşme `backend/tools/contracts/get_chart_data.json`, testleri `tests/test_chart.py`). Model grafiğin **tarifini** verir (tür, boyut, ölçü, süzgeç); noktaları tool hesaplar. Model seri yazmaz, toplam çıkarmaz (CLAUDE.md › Yasaklar). Zarftan `chart_card` olayı kurulur (`docs/chat.md`).
+Uçuş listesi üzerinde genel grafik sorgusu. Sohbette "…grafiğe dök" türü isteklerin tek tool'udur (kontrat `2.0.0`: `backend/tools/contracts/get_chart_data.json`; testleri `tests/test_chart.py`, `tests/test_chart_fields.py`, `tests/test_chart_query.py`). Model grafiğin **tarifini** verir (tür, gruplama, ölçü, süzgeç, değişim); noktaları tool hesaplar. Model seri yazmaz, toplam ya da yüzde çıkarmaz (CLAUDE.md › Yasaklar). Zarftan `chart_card` olayı kurulur (`docs/chat.md`).
+
+### Düz uçuş görünümü
+
+Her uçuş için tek satır (`backend/tools/chart_fields.py` › `FIELDS`, `build_rows`): `flights` + `movements` (`flight_id` ile; hareketi olmayan uçuş kapsam dışı) + `delays` (`flight_id`) + `aircraft` (`registration`) + `stands` (`movements.stand_code`). Yetim kayıtlar kullanılmaz. Kaynakta değeri olmayan (`null`/boş) alan satırda **hiç yoktur**; o alana göre gruplamada uçuş `unclassified` sayılır.
+
+| Tür | Alanlar |
+|---|---|
+| Kategorik (gruplanır, süzülür) | `airline` (sefer no'nun ilk iki karakteri, büyük harf; ad üretilmez), `flight_no`, `callsign`, `registration`, `aircraft_type`, `origin`, `destination` (IATA kod; yerel havalimanı `XXXX`), `code_letter`, `operator_iata`, `movement_type` (`ARRIVAL`/`DEPARTURE`), `stand_code`, `gate_code`, `stand_type`, `max_code_letter`, `delay_code`, `delay_category`, `cancelled` (`"true"`/`"false"`), `status` (`cancelled`, `delayed`, `on_time`) |
+| Zaman (kovalanır, süzülür) | `scheduled_time`, `estimated_time`, `actual_runway_time`, `actual_block_time` |
+| Sayısal (toplanır, süzülür) | `delay_minutes` |
+
+Kontrattaki alan enum'ları `FIELDS` ile birebir aynıdır (testle denetlenir).
 
 ### Girdi
 
 | Alan | Zorunlu | Değerler | Varsayılan |
 |---|---|---|---|
-| `chart_type` | evet | `bar_horizontal`, `bar_vertical`, `pie`, `line` | — |
-| `group_by` | evet | `airline`, `aircraft_type`, `origin`, `destination`, `stand`, `gate`, `hour`, `status` | — |
-| `metric` | hayır | `count`, `total_delay_minutes`, `avg_delay_minutes` | `count` |
-| `direction` | hayır | `all`, `arrival`, `departure` | `all` |
-| `include_cancelled` | hayır | `true`, `false` | `true` |
-| `limit` | hayır | `5`, `10`, `20` | `10` |
+| `chart_type` | evet | `bar_horizontal`, `bar_vertical`, `stacked_bar`, `grouped_bar`, `pie`, `doughnut`, `line`, `area`, `heatmap` | — |
+| `group_by` | evet | `{"field": <kategorik ya da zaman alanı>, "bucket": "hour"\|"half_hour"}`; zaman alanı `bucket` ister, diğerleri almaz | — |
+| `series_by` | hayır | `group_by` ile aynı biçim, farklı alan | yok |
+| `measure` | hayır | `{"agg": "count"\|"sum"\|"avg"\|"min"\|"max", "field": "delay_minutes"}`; `count`'ta `field` yok | `{"agg": "count"}` |
+| `filters` | hayır | `[{"field": <alan>, "op": "eq"\|"ne"\|"in"\|"gt"\|"ge"\|"lt"\|"le", "value": ...}]` (VE) | `[]` |
+| `sort` | hayır | `value_desc`, `value_asc`, `label` | `value_desc` |
+| `limit` | hayır | `5`, `10`, `20`, `50` | `10` |
+| `derive` | hayır | `"pct_change_vs_previous"` (yalnızca zaman kovasıyla) | yok |
+| `plot` | hayır | `"value"`, `"change_pct"` | `"value"` |
 
 - `chart_type` kullanıcıdan gelir. Belirtmediyse model tool'u çağırmadan türü sorar; kural tool açıklamasındadır, talimat metni değişmedi.
-- `line` yalnızca `group_by` `hour` ile geçerlidir (şemanın anlatamadığı kural; ihlal `SCHEMA_VALIDATION_FAILED`, author `layer`).
-- `airline` sefer numarasının ilk iki karakteridir; veride havayolu tablosu olmadığı için ad üretilmez. `origin`/`destination` kayıttaki IATA koddur (yerel havalimanı `XXXX`). `hour` `scheduled_time`'ın saat dilimidir (`"14"`). `status`: `cancelled`, `delayed` (gecikme kaydı var), `on_time`.
-- Gecikme ölçüleri yalnızca gecikme kaydı olan uçuşlardan hesaplanır; gecikmeli uçuşu olmayan grup grafikte yer almaz. Ortalama bir ondalığa yuvarlanır.
+- **Süzgeç değerleri.** Zaman alanlarında ISO 8601 zaman (saat dilimi zorunlu, kronolojik karşılaştırma) ya da tarihsiz `"HH:MM"` (kaydın yerel saat bölümüyle, tarihe bakmadan). `gt`/`ge`/`lt`/`le` yalnızca sayısal ve zaman alanlarında. `in` en çok 20 öğeli, boş olmayan dizi. `cancelled` için `true`/`false` ya da `"true"`/`"false"`. Alanı satırda olmayan uçuş hiçbir koşulu sağlamaz (`ne` dahil).
+- **Ölçü.** `count` bütün süzgeçli uçuşları sayar. `sum`/`avg`/`min`/`max` yalnızca `delay_minutes` değeri olan (gecikme kaydı olan) uçuşları kullanır; hiç değeri olmayan grup `items`'ta yer almaz. `avg` bir ondalığa yuvarlanır (tek yuvarlama noktası).
+- **Sıra ve kesme.** Zaman kovası: saat artan sırayla, `sort`/`limit` yok sayılır. `status`: `cancelled`, `delayed`, `on_time`. Diğerleri: `sort`, sonra `limit`; `groups_total` kesilmeden önceki grup sayısıdır. `series_by` varsa en büyük 8 seri kalır (değere göre, eşitlikte etiket), kalan sayısı `series_truncated`'dır.
+- **Zaman kovası etiketi.** `hour` → `"14:00"`; `half_hour` → `"14:00"`/`"14:30"`.
+- **Değişim (`derive`).** Her satır için aynı seride hemen önceki kova varsa ve değeri sıfırdan büyükse `change_pct = round((bu − önceki) / önceki × 100, 1)` ve `trend` (`up`/`down`/`flat`, ham değerlerle) eklenir. Önceki kova yoksa (ilk kova, uçuşsuz saat, süzgeç dışı saat) ya da sıfırsa iki alan **yazılmaz**: sıfıra bölme, sonsuz ya da uydurma yüzde olmaz. `plot: "change_pct"` grafiğin bunu çizmesini sağlar.
+- **Geçerlilik** (şemanın anlatamadığı kurallar, `chart_query.check_query`; ihlal `SCHEMA_VALIDATION_FAILED`, author `layer`, veri okunmaz): `line`/`area` zaman kovasıyla; `stacked_bar`/`grouped_bar`/`heatmap` `series_by` ister; `pie`/`doughnut` ile `series_by` olmaz; `series_by` ≠ `group_by`; `bucket` yalnızca zaman alanıyla; `sum`/`avg`/`min`/`max` sayısal alan ister; `derive` zaman kovasıyla; `plot: "change_pct"` `derive` ister ve yalnızca `bar_horizontal`, `bar_vertical`, `grouped_bar`, `line`, `area` ile; hücre sınırı: `series_by` varsa (grup üst sınırı × 8) ≤ 200 (`hour` 24, `half_hour` 48, `status` 3, diğerleri `limit`).
+- Süzgeç hiçbir uçuşu bırakmazsa hata değildir: `flights` 0, `items` boş.
 
 ### `value`
 
-`date`, `chart_type`, `group_by`, `metric` (doğrulanmış argümanlar), `flights` (süzgeçten geçen uçuş), `groups_total`, `unclassified` (boyutu kayıtta olmayan, hiçbir gruba girmeyen uçuş; ör. iptal edilen uçuşun stand'i yoktur) ve `items` (`{label, value}`). Sıra: `hour` saat artan, `status` iptal–gecikmeli–zamanında, diğerleri değer azalan, eşitlikte etiket artan. `limit` `hour` ve `status` dışında en büyük grupları tutar; `groups_total` kesilmeden önceki sayıdır.
+`date`, `chart_type`, `group_by`, `series_by?`, `measure`, `derive?`, `plot` (doğrulanmış argümanlar), `flights` (süzgeçten geçen uçuş), `groups_total`, `unclassified`, `series_truncated?` (yalnızca `series_by` varken) ve `items`: düz satırlar `{"label", "series"?, "value", "change_pct"?, "trend"?}`, grup sırasıyla, grup içinde seri sırasıyla.
 
-Örnek (`seed42-2026-10-20`, `{"chart_type": "bar_horizontal", "group_by": "airline", "direction": "arrival"}`): `flights` 300, `items` `TK` 154, `AJ` 34, `QR` 25, `PC` 23, `AF` 15, `KL` 13, `LX` 13, `BA` 10, `LH` 7, `EK` 6.
+Örnekler (`seed42-2026-10-20`):
+
+- `{"chart_type": "pie", "group_by": {"field": "movement_type"}}` → `ARRIVAL` 300, `DEPARTURE` 300.
+- `{"chart_type": "bar_horizontal", "group_by": {"field": "airline"}, "filters": [{"field": "movement_type", "op": "eq", "value": "ARRIVAL"}]}` → `flights` 300; `TK` 154, `AJ` 34, `QR` 25, `PC` 23, `AF` 15, `KL` 13, `LX` 13, `BA` 10, `LH` 7, `EK` 6.
+- "Gelen-giden uçuşların 18:00'deki sayısının 17:00'ye göre değişimi (ok ve % ile yatay çubuk)": `group_by` `scheduled_time` + `hour`, `series_by` `movement_type`, `filters` `scheduled_time ge "17:00"` ve `lt "19:00"`, `derive` `pct_change_vs_previous`, `plot` `change_pct`, `bar_horizontal` → dört satır (17:00 ve 18:00 × iki seri); 17:00 satırlarında `change_pct`/`trend` yok, 18:00 satırlarında var.
 
 ## Örnek akış
 
