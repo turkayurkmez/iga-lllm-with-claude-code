@@ -66,25 +66,25 @@ def test_v3_kayitli_ve_aktif():
 # ───────── Yazım kuralları: her kayıtlı sürümde ─────────
 
 
-@pytest.mark.parametrize("name", ["v1", "v2", "v3"])
+@pytest.mark.parametrize("name", ["v1", "v2", "v3", "v4"])
 @pytest.mark.parametrize("kind", OPERATIONAL_PATTERNS)
 def test_operasyon_verisi_yok(name, kind):
     assert OPERATIONAL_PATTERNS[kind].findall(read(name)) == []
 
 
-@pytest.mark.parametrize("name", ["v1", "v2", "v3"])
+@pytest.mark.parametrize("name", ["v1", "v2", "v3", "v4"])
 def test_snake_case_yalniz_kayitli_tool_adlari(name):
     registered = {definition["name"] for definition in tool_definitions()}
 
     assert set(SNAKE_CASE_PATTERN.findall(read(name))) <= registered
 
 
-@pytest.mark.parametrize("name", ["v1", "v2", "v3"])
+@pytest.mark.parametrize("name", ["v1", "v2", "v3", "v4"])
 def test_hata_kodlari_zarftaki_kodlardan(name):
     assert set(CODE_PATTERN.findall(read(name))) <= ZARF_KODLARI
 
 
-@pytest.mark.parametrize("name", ["v2", "v3"])
+@pytest.mark.parametrize("name", ["v2", "v3", "v4"])
 def test_zarf_alan_adlari_gecmez(name):
     # docs/chat.md › Talimat v2: "veri zamanı", "eski işaretli" gibi Türkçe adlar.
     found = re.findall(
@@ -96,7 +96,7 @@ def test_zarf_alan_adlari_gecmez(name):
     assert found == []
 
 
-@pytest.mark.parametrize("name", ["v1", "v2", "v3"])
+@pytest.mark.parametrize("name", ["v1", "v2", "v3", "v4"])
 def test_markdown_baslik_xml_ve_bicimlendirme_yok(name):
     text = read(name)
 
