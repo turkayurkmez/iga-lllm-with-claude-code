@@ -33,6 +33,24 @@ FINDINGS: dict[str, re.Pattern[str]] = {
     "gizli_unicode": re.compile(
         r"[\u00ad\u180e\u200b-\u200f\u202a-\u202e\u2060-\u2064\u2066-\u2069\ufeff\U000e0000-\U000e007f]"
     ),
+    "asistana_emir": re.compile(
+        r"(?:(?:bundan\s+sonra|from\s+now\s+on)[^.\n]{0,40}?"
+        r"(?:cevab|cevap|yanit|soru|kullanici|asistan|answer|respond|reply|user)"
+        r"|(?:her|tum|butun)\s+(?:cevab|cevap|yanit|soru)\w*[^.\n]{0,40}?"
+        r"(?:sonuna|basina|ekle|yaz|\bde\b|soyleme)"
+        r"|kullanici(?:ya|dan)\s+[^.\n]{0,30}?(?:soyleme|gosterme|iste\b|isteyin)"
+        r"|(?:do\s+not|don't|never)\s+(?:tell|inform|reveal|show)\s+the\s+user"
+        r"|\b(?:asistan|assistant|yapay\s+zeka|dil\s+modeli|language\s+model)\w*\s*[,:]"
+        r"|you\s+are\s+now\b)",
+        re.IGNORECASE,
+    ),
+    "gizli_metin": re.compile(
+        r"(?:<[a-z][^>]*\shidden\b"
+        r"|style\s*=\s*[\"'][^\"']*"
+        r"(?:display\s*:\s*none|visibility\s*:\s*hidden|font-size\s*:\s*0)"
+        r"|^\s*\[//\]:\s*#|<script\b)",
+        re.IGNORECASE | re.MULTILINE,
+    ),
     "html_yorumu": re.compile(r"<!--"),
 }
 
