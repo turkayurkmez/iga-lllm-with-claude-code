@@ -38,6 +38,8 @@ interface Turn {
   error: string | null
   pending: boolean
   feedback: FeedbackState
+  // Oturum bulunamadığı için konuşma sıfırlandı (done.session_reset).
+  reset: boolean
 }
 
 // Geri bildirim durumu: gönderilince geri alınamaz, başarısızsa yeniden denenebilir.
@@ -211,6 +213,8 @@ function Chat() {
   const [turns, setTurns] = useState<Turn[]>([])
   const [draft, setDraft] = useState('')
   const [nextId, setNextId] = useState(1)
+  // Sunucunun verdiği oturum kimliği; yeni konuşmada bırakılır.
+  const [sessionId, setSessionId] = useState<string | null>(null)
   // Haritadaki tek seçim: kalıcıdır, sonraki mesaja `selected` olarak eklenir.
   const [selected, setSelected] = useState<SelectedObject | null>(null)
   const [highlight, setHighlight] = useState<Highlight | null>(null)
@@ -247,6 +251,7 @@ function Chat() {
         error: null,
         pending: true,
         feedback: 'idle',
+        reset: false,
       },
     ])
 
@@ -280,11 +285,21 @@ function Chat() {
       onSelection: (card) =>
         update(id, (turn) => ({ selections: [...turn.selections, card] })),
       onText: (text) => update(id, (turn) => ({ answer: turn.answer + text })),
-      onDone: (done) => update(id, () => ({ done, pending: false })),
+      onDone: (done) => {
+        setSessionId(done.session_id)
+        update(id, () => ({ done, pending: false, reset: done.session_reset }))
+      },
       onError: (error) => update(id, () => ({ error, pending: false })),
       },
       selected,
+      sessionId,
     )
+  }
+
+  // Oturumu bırakır ve ekrandaki turları temizler; sunucudaki oturum süresi dolunca silinir.
+  function newConversation() {
+    setSessionId(null)
+    setTurns([])
   }
 
   async function reject(id: number, auditId: string) {
@@ -309,7 +324,12 @@ function Chat() {
           <Link to="/">← Doğrulama sayfası</Link>
         </p>
         <h1>Sohbet</h1>
-        <p className="note">Her soru bağımsız gönderilir; önceki mesajlar modele iletilmez.</p>
+        <p className="note">
+          Konuşma bu sayfada sürer; önceki mesajlarınız bağlam olarak modele iletilir.
+          <button type="button" className="new-chat" disabled={pending} onClick={newConversation}>
+            Yeni konuşma
+          </button>
+        </p>
       </header>
 
       <section className="turns" aria-live="polite">
@@ -327,6 +347,11 @@ function Chat() {
               <p className="question">{turn.question}</p>
               {turn.context !== null && <ContextChip context={turn.context} />}
               <div className="answer">
+                {turn.reset && (
+                  <p className="notice warn">
+                    Önceki konuşma sıfırlandı; bu soru bağımsız yanıtlandı.
+                  </p>
+                )}
                 {turn.answer !== '' && <p className="answer-text">{turn.answer}</p>}
                 {turn.pending && turn.answer === '' && (
                   <p className="note">
