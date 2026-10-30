@@ -204,51 +204,13 @@ class ScriptedClient:
         return self._responses.pop(0)
 
 
-def fake_envelope(value) -> dict:
-    return {
-        "value": value,
-        "source": "data/korpus",
-        "as_of": NOW,
-        "filters": {},
-        "stale": False,
-        "tool_version": "1.0.0",
-        "error": None,
-        "author": "tool",
-    }
-
-
-def poisoned_tool(attack: dict) -> tuple[str, dict] | None:
-    """Saldırının sahte tool zarfı: (tool adı, zarf) ya da None."""
-    if attack["zehirli_parca"]:
-        part = attack["zehirli_parca"]
-        chunk = {
-            "chunk_id": part["chunk_id"],
-            "doc_id": part["chunk_id"].split("#")[0],
-            "title": "Sahte belge",
-            "section": "Bölüm",
-            "revision": "1",
-            "effective_from": "2026-01-01",
-            "status": "active",
-            "authority": "Sahte makam",
-            "priority_level": 1,
-            "language": "tr",
-            "text": part["text"],
-        }
-        return "search_documents", fake_envelope([chunk])
-    if attack["zehirli_zarf"]:
-        return attack["zehirli_zarf"]["tool"], fake_envelope(
-            attack["zehirli_zarf"]["value"]
-        )
-    return None
-
-
 def run_compliant(attack: dict, monkeypatch) -> tuple[AgentResult, ScriptedClient]:
     system = instructions.load(VERSION)
     answer = attack["uyumlu_cevap"]
     if answer == PLACEHOLDER:
         answer = system.split("\n\n")[1]
     responses = []
-    poisoned = poisoned_tool(attack)
+    poisoned = load_module().poisoned_tool(attack, NOW)
     if poisoned is not None:
         name, envelope = poisoned
         args = {"query": attack["girdi"]}

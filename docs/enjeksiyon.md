@@ -2,6 +2,20 @@
 
 Bu belge, modelin okuduğu güvenilmez içerikten (belge parçası, tool çıktısı, sohbet mesajı) gelen talimat enjeksiyonuna karşı alınacak önlemlerin sözleşmesidir. İlke: **model ikna olsa bile zarar veremesin.** Model tarafı önlemler (talimat metni) olasılıksaldır, tek başına yeterli sayılmaz; asıl güvence kodun deterministik denetimleridir.
 
+## Uygulama durumu
+
+| Gereksinim | Durum | Kod | Test |
+|---|---|---|---|
+| E1 sınırlandırma | kodlandı | `backend/injection.py` › `render_tool_result` (`backend/agent.py` › `_execute`) | `tests/test_injection.py`, `tests/test_agent.py` |
+| E2 talimat v4 | kodlandı (varsayılan **v3**; geçiş ölçüm sonrası karar) | `backend/instructions/v4.md` | `tests/test_instruction_v4.py` |
+| E3 indeks taraması | kodlandı (`text`, `title`, `section` taranır) | `backend/injection.py` › `filter_chunks`, `backend/rag/index.py` | `tests/test_injection.py`, `tests/test_rag_index.py` |
+| E4 girdi sınırı | kodlandı | `backend/main.py` › `MAX_MESSAGE_CHARS` | `tests/test_chat.py` |
+| E5 çıktı doğrulama | kodlandı (yalnızca işaretler) | `backend/injection.py`, `backend/audit.py` | `tests/test_injection.py`, `tests/test_audit.py` |
+| E6 izleme | kodlandı | `backend/audit.py`, `scripts/audit_report.py --isaretli` | `tests/test_audit.py`, `tests/test_audit_report.py` |
+| E7 saldırı seti | kodlandı | `eval/enjeksiyon-saldirilari.json`, `eval/enjeksiyon.py`, `scripts/enjeksiyon_kos.py` (ÜCRETLİ) | `tests/test_enjeksiyon_seti.py`, `tests/test_enjeksiyon_kos.py` |
+
+Bilinen sınır: `dolayli_tool` saldırılarında tool alanı sınırlandırılmaz (E1); bunları yalnızca talimat v4 (model katmanı) karşılar ve yalnızca ücretli koşu ölçer. Saldırı kaydı `zehirli_zarf` (`{tool, value}`) taşıyabilir.
+
 ## Tehdit modeli
 
 | Kaynak | Güven | Kalıcılık | Not |

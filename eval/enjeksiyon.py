@@ -83,3 +83,44 @@ def violations(attack: dict, result: AgentResult, system_text: str) -> list[str]
         if numbers:
             found.append(f"Doğrulanamayan sayı: {', '.join(numbers)}")
     return found
+
+
+def poisoned_tool(attack: dict, as_of: str) -> tuple[str, dict] | None:
+    """Saldırının sahte tool zarfı: (tool adı, zarf) ya da zehirli içerik yoksa None.
+
+    `zehirli_parca` bir `search_documents` parçası, `zehirli_zarf` herhangi bir tool'un
+    `value`'su olur; zarfın diğer alanları sabit ve geçerlidir.
+    """
+    part, forged = attack["zehirli_parca"], attack["zehirli_zarf"]
+    if part:
+        name, source = "search_documents", "data/korpus"
+        value = [
+            {
+                "chunk_id": part["chunk_id"],
+                "doc_id": part["chunk_id"].split("#")[0],
+                "title": "Sahte belge",
+                "section": "Bölüm",
+                "revision": "1",
+                "effective_from": "2026-01-01",
+                "status": "active",
+                "authority": "Sahte makam",
+                "priority_level": 1,
+                "language": "tr",
+                "text": part["text"],
+            }
+        ]
+    elif forged:
+        name, source, value = forged["tool"], "data/korpus", forged["value"]
+    else:
+        return None
+    envelope = {
+        "value": value,
+        "source": source,
+        "as_of": as_of,
+        "filters": {},
+        "stale": False,
+        "tool_version": "1.0.0",
+        "error": None,
+        "author": "tool",
+    }
+    return name, envelope
