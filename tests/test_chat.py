@@ -560,3 +560,42 @@ def test_model_cagrisi_olay_dongusu_disinda_yapilir(chat):
     _, client = chat([turn(1, "tool_use", SUMMARY_ALL), answer(2)])
 
     assert client.loop_running == [False, False]
+
+
+# --- 10. Mesaj uzunluk sınırı (docs/enjeksiyon.md E4) -------------------------------
+
+
+def test_mesaj_sinir_uzunlugunda_kabul_edilir(chat):
+    assert main.MAX_MESSAGE_CHARS == 2000
+
+    events, client = chat([answer(1)], message="a" * main.MAX_MESSAGE_CHARS)
+
+    assert of_type(events, "done")[0]["status"] == "tamam"
+    assert len(client.requests) == 1
+
+
+def test_mesaj_siniri_asilinca_422():
+    response = TestClient(main.app).post(
+        "/chat", json={"message": "a" * (main.MAX_MESSAGE_CHARS + 1)}
+    )
+
+    assert response.status_code == 422
+    assert str(main.MAX_MESSAGE_CHARS) in json.dumps(response.json(), ensure_ascii=False)
+
+
+def test_sinir_kod_noktasiyla_sayilir(chat):
+    events, _ = chat([answer(1)], message="ş" * main.MAX_MESSAGE_CHARS)
+    assert of_type(events, "done")[0]["status"] == "tamam"
+
+    response = TestClient(main.app).post(
+        "/chat", json={"message": "😀" * (main.MAX_MESSAGE_CHARS + 1)}
+    )
+    assert response.status_code == 422
+
+
+def test_bosluklar_sinirdan_once_kirpilir(chat):
+    message = "  " + "a" * main.MAX_MESSAGE_CHARS + "  "
+
+    events, _ = chat([answer(1)], message=message)
+
+    assert of_type(events, "done")[0]["status"] == "tamam"

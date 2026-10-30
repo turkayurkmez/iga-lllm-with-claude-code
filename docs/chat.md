@@ -11,6 +11,7 @@ Akış başlamadan önceki hatalar HTTP durum koduyla döner, olay üretilmez, m
 | Durum | Kod | Gövde |
 |---|---|---|
 | Mesaj boş ya da yalnızca boşluk | `422` | FastAPI doğrulama gövdesi |
+| Mesaj kırpıldıktan sonra 2000 karakterden (kod noktası) uzun (`backend/main.py` › `MAX_MESSAGE_CHARS`; `docs/enjeksiyon.md` E4) | `422` | FastAPI doğrulama gövdesi |
 | `selected` yanlış biçimli (açık `null`, bilinmeyen `object_type`, `object_type`'a uymayan `id`, fazla alan) | `422` | FastAPI doğrulama gövdesi |
 | `selected` nesnesi veride yok (`docs/harita.md` › Haritadan sohbete bağlam) | `422` | `{"detail": [{"type": "value_error", "loc": ["body", "selected"], "msg": "..."}]}` |
 | `selected` doğrulanırken veri okunamadı | `503` | `{"detail": SELECTED_UNAVAILABLE_MESSAGE}` (`backend/main.py`) |

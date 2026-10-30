@@ -122,6 +122,10 @@ class Selected(BaseModel):
         return self
 
 
+# docs/enjeksiyon.md E4: uzun enjeksiyon yükünü ve maliyeti sınırlar (kod noktası).
+MAX_MESSAGE_CHARS = 2000
+
+
 class ChatRequest(BaseModel):
     message: str
     selected: Selected | None = None
@@ -140,6 +144,8 @@ class ChatRequest(BaseModel):
         value = value.strip()
         if not value:
             raise ValueError("Mesaj boş olamaz.")
+        if len(value) > MAX_MESSAGE_CHARS:
+            raise ValueError(f"Mesaj en fazla {MAX_MESSAGE_CHARS} karakter olabilir.")
         return value
 
 
