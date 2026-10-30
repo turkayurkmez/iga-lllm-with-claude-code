@@ -19,6 +19,7 @@ VERSIONS = {
     "v2": "2.0.0",
     "v3": "3.0.0",
     "v4": "4.0.0",
+    "v5": "5.0.0",
 }
 
 _DIR = Path(__file__).resolve().parent
