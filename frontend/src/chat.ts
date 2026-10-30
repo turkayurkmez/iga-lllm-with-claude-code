@@ -39,24 +39,54 @@ export interface KpiCard {
   as_of: string | null
 }
 
-export const CHART_TYPES = ['bar_horizontal', 'bar_vertical', 'pie', 'line'] as const
+export const CHART_TYPES = [
+  'bar_horizontal',
+  'bar_vertical',
+  'stacked_bar',
+  'grouped_bar',
+  'pie',
+  'doughnut',
+  'line',
+  'area',
+  'heatmap',
+] as const
 export type ChartType = (typeof CHART_TYPES)[number]
 
+export type Trend = 'up' | 'down' | 'flat'
+
+// Bir grafik noktası: değer, değişim ve yön sunucudan olduğu gibi gelir.
 export interface ChartItem {
   label: string
+  series?: string
   value: number
+  change_pct?: number
+  trend?: Trend
+}
+
+export interface ChartDimension {
+  field: string
+  bucket?: string
+}
+
+export interface ChartMeasure {
+  agg: string
+  field?: string
 }
 
 // get_chart_data zarfı olduğu gibi (docs/chat.md › chart_card); noktaları sunucu hesaplar.
 export interface ChartCard {
   tool: string
   chart_type: ChartType
-  group_by: string
-  metric: string
+  group_by: ChartDimension
+  series_by?: ChartDimension
+  measure: ChartMeasure
+  derive?: string
+  plot: 'value' | 'change_pct'
   date: string
   flights: number
   groups_total: number
   unclassified: number
+  series_truncated?: number
   items: ChartItem[]
   filters: Record<string, unknown>
   source: string
@@ -201,20 +231,47 @@ function isKpi(data: Record<string, unknown>): data is Record<string, unknown> &
   )
 }
 
+function isOptional<T>(value: unknown, check: (value: unknown) => value is T): boolean {
+  return value === undefined || check(value)
+}
+
+function isNumber(value: unknown): value is number {
+  return typeof value === 'number'
+}
+
 function isChartItem(item: unknown): item is ChartItem {
-  return isRecord(item) && isString(item.label) && typeof item.value === 'number'
+  return (
+    isRecord(item) &&
+    isString(item.label) &&
+    typeof item.value === 'number' &&
+    isOptional(item.series, isString) &&
+    isOptional(item.change_pct, isNumber) &&
+    (item.trend === undefined || ['up', 'down', 'flat'].includes(item.trend as string))
+  )
+}
+
+function isDimension(value: unknown): value is ChartDimension {
+  return isRecord(value) && isString(value.field) && isOptional(value.bucket, isString)
+}
+
+function isMeasure(value: unknown): value is ChartMeasure {
+  return isRecord(value) && isString(value.agg) && isOptional(value.field, isString)
 }
 
 function isChart(data: Record<string, unknown>): data is Record<string, unknown> & ChartCard {
   return (
     isString(data.tool) &&
     (CHART_TYPES as readonly string[]).includes(data.chart_type as string) &&
-    isString(data.group_by) &&
-    isString(data.metric) &&
+    isDimension(data.group_by) &&
+    (data.series_by === undefined || isDimension(data.series_by)) &&
+    isMeasure(data.measure) &&
+    isOptional(data.derive, isString) &&
+    (data.plot === 'value' || data.plot === 'change_pct') &&
     isString(data.date) &&
     typeof data.flights === 'number' &&
     typeof data.groups_total === 'number' &&
     typeof data.unclassified === 'number' &&
+    isOptional(data.series_truncated, isNumber) &&
     Array.isArray(data.items) &&
     data.items.every(isChartItem) &&
     isRecord(data.filters) &&

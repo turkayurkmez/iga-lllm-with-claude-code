@@ -1,48 +1,124 @@
 {
   "name": "get_chart_data",
-  "version": "1.0.0",
-  "description": "Günün uçuşlarını bir boyuta göre gruplayıp sayar ya da gecikme süresini toplar ve sohbet ekranında grafik olarak çizilecek veriyi döndürür: chart_type (istenen grafik türü), group_by (gruplama boyutu), metric (ölçü), items (etiket ve sayı çiftleri), flights (kapsamdaki uçuş sayısı), groups_total (toplam grup sayısı) ve unclassified (boyutu veride olmadığı için hiçbir gruba girmeyen uçuş sayısı). Sayılar serviste hesaplanır; günün tamamını kapsar, saate göre süzülmez. Grafiği ekran çizer; sen çizim, sayı ya da toplam üretmezsin.\n\nNe zaman kullanılır: kullanıcı uçuşları bir boyuta göre grafik, çizim ya da görsel olarak görmek istediğinde. group_by değerleri: airline (havayolu kodu), aircraft_type (uçak tipi), origin (kalkış havalimanı), destination (varış havalimanı), stand, gate, hour (planlanan saatin saat dilimi, ör. 14), status (iptal, gecikmeli, zamanında). metric değerleri: count (uçuş sayısı), total_delay_minutes (gecikmeli uçuşların toplam gecikme dakikası), avg_delay_minutes (gecikmeli uçuşların ortalama gecikme dakikası). Örnekler: \"Bugünkü gelen uçuşları hava yolu bazında grafiğe dök\" → {\"chart_type\": \"bar_horizontal\", \"group_by\": \"airline\", \"direction\": \"arrival\"}; \"Saatlere göre kalkışları çizgi grafikle göster\" → {\"chart_type\": \"line\", \"group_by\": \"hour\", \"direction\": \"departure\"}; \"Uçak tiplerine göre gecikmeyi pasta grafikle göster\" → {\"chart_type\": \"pie\", \"group_by\": \"aircraft_type\", \"metric\": \"total_delay_minutes\"}.\n\nchart_type kullanıcının isteğinden gelir, sen seçmezsin. Kullanıcı grafik türünü belirtmediyse bu aracı ÇAĞIRMA; önce hangi türü istediğini sor ve seçenekleri say: yatay çubuk (bar_horizontal), dikey çubuk (bar_vertical), pasta (pie), çizgi (line; yalnızca group_by hour ile). Cevabı aldıktan sonra çağır.\n\nNe zaman KULLANILMAZ: grafik istenmeden yalnızca toplam, iptal ya da gecikme sayısı sorulduğunda (get_flight_summary kullan); tek bir sefer, callsign ya da tescil sorulduğunda; veride olmayan bir boyut ya da ölçü (yolcu sayısı, terminal, gecikme nedeni, birden çok gün, trend) istendiğinde. Bu durumlarda araç çağırmadan, bu grafiğin mevcut verilerle çizilemediğini söyle. Sayıları kendin toplama, çıkarma ya da grafik için kendin seri yazma.",
+  "version": "2.0.0",
+  "description": "Günün uçuş listesini istenen alana göre gruplar, süzer, sayar ya da gecikme dakikasını toplar ve sohbet ekranında grafik olarak çizilecek veriyi döndürür: chart_type (istenen grafik türü), group_by (gruplama), series_by (isteğe bağlı ikinci boyut), measure (ölçü), flights (süzgeçten geçen uçuş sayısı), groups_total (toplam grup sayısı), unclassified (gruplama alanı veride olmayan uçuş sayısı) ve items (etiket, varsa seri, değer; derive verildiyse ayrıca change_pct ve trend). Sayılar, yüzdeler ve oklar serviste hesaplanır; günün tamamını kapsar. Grafiği ekran çizer; sen çizim, sayı, yüzde ya da seri üretmezsin.\n\nNe zaman kullanılır: kullanıcı uçuşları bir alana göre (havayolu, uçak tipi, gelen/giden, saat, stand, gate, kalkış/varış yeri, gecikme nedeni, durum vb.) grafik, çizim ya da görsel olarak görmek istediğinde. group_by: {field, bucket}; zaman alanları (scheduled_time, estimated_time, actual_runway_time, actual_block_time) bucket ister (hour ya da half_hour). series_by aynı biçimde ikinci boyuttur (yığılmış/gruplu çubuk, ısı haritası, çok çizgili grafik). measure: count (uçuş sayısı, varsayılan) ya da delay_minutes üzerinde sum/avg/min/max; gecikme ölçüleri yalnızca gecikme kaydı olan uçuşları kullanır. filters: alan, işleç (eq, ne, in, gt, ge, lt, le) ve değer; zaman alanlarında değer ISO zaman ya da tarihsiz \"HH:MM\" olabilir (günün tarihini bilmen gerekmez). Örnekler: \"Gelen ve giden uçakları pasta grafikte göster\" → {\"chart_type\": \"pie\", \"group_by\": {\"field\": \"movement_type\"}}; \"Bugünkü gelen uçuşları hava yolu bazında grafiğe dök\" → {\"chart_type\": \"bar_horizontal\", \"group_by\": {\"field\": \"airline\"}, \"filters\": [{\"field\": \"movement_type\", \"op\": \"eq\", \"value\": \"ARRIVAL\"}]}; \"Saat saat gelen ve giden uçuşları yığılmış çubukla göster\" → {\"chart_type\": \"stacked_bar\", \"group_by\": {\"field\": \"scheduled_time\", \"bucket\": \"hour\"}, \"series_by\": {\"field\": \"movement_type\"}}; \"Uçak tiplerine göre ortalama gecikmeyi göster\" → group_by aircraft_type, measure {\"agg\": \"avg\", \"field\": \"delay_minutes\"}; \"60 dakikadan fazla gecikenleri havayoluna göre göster\" → filters [{\"field\": \"delay_minutes\", \"op\": \"gt\", \"value\": 60}]; \"Gelen-giden uçuşların 18:00'deki sayısının 17:00'ye göre değişimini ok ve yüzde ile yatay çubukla göster\" → {\"chart_type\": \"bar_horizontal\", \"group_by\": {\"field\": \"scheduled_time\", \"bucket\": \"hour\"}, \"series_by\": {\"field\": \"movement_type\"}, \"filters\": [{\"field\": \"scheduled_time\", \"op\": \"ge\", \"value\": \"17:00\"}, {\"field\": \"scheduled_time\", \"op\": \"lt\", \"value\": \"19:00\"}], \"derive\": \"pct_change_vs_previous\", \"plot\": \"change_pct\"}. Önceki saate göre değişim (ok ve yüzde) istenirse derive ve plot change_pct kullan; ilk saatte ve önceki saati olmayan satırda değişim yoktur.\n\nchart_type kullanıcının isteğinden gelir, sen seçmezsin. Kullanıcı grafik türünü belirtmediyse bu aracı ÇAĞIRMA; önce hangi türü istediğini sor ve seçenekleri say: yatay çubuk (bar_horizontal), dikey çubuk (bar_vertical), yığılmış çubuk (stacked_bar), gruplu çubuk (grouped_bar), pasta (pie), halka (doughnut), çizgi (line), alan (area), ısı haritası (heatmap). line ve area yalnızca saat kovasıyla; stacked_bar, grouped_bar ve heatmap series_by ister; pie ve doughnut series_by almaz; değişim (plot change_pct) pasta, halka, yığılmış çubuk ve ısı haritasıyla çizilemez. Cevabı aldıktan sonra çağır.\n\nNe zaman KULLANILMAZ: grafik istenmeden yalnızca toplam, iptal ya da gecikme sayısı sorulduğunda (get_flight_summary kullan); tek bir sefer, callsign ya da tescil sorulduğunda; veride olmayan bir alan ya da ölçü (yolcu sayısı, terminal, doluluk, birden çok gün, trend) istendiğinde; sırt sırta (butterfly) düzen istendiğinde. Bu durumlarda araç çağırmadan, bu grafiğin mevcut verilerle çizilemediğini söyle. Sayıları, yüzdeleri kendin hesaplama, toplama ya da grafik için kendin seri yazma.",
   "input_schema": {
     "type": "object",
     "properties": {
       "chart_type": {
         "type": "string",
-        "enum": ["bar_horizontal", "bar_vertical", "pie", "line"],
-        "description": "Grafik türü: bar_horizontal yatay çubuk, bar_vertical dikey çubuk, pie pasta, line çizgi (yalnızca group_by hour ile). Kullanıcının söylediği türü ver; söylemediyse aracı çağırmadan önce sor. Değerler küçük harflidir ve alt çizgilidir.",
-        "examples": ["bar_horizontal", "bar_vertical", "pie", "line"]
+        "enum": ["bar_horizontal", "bar_vertical", "stacked_bar", "grouped_bar", "pie", "doughnut", "line", "area", "heatmap"],
+        "description": "Grafik türü. Kullanıcının söylediği türü ver; söylemediyse aracı çağırmadan önce sor. Değerler küçük harflidir ve alt çizgilidir.",
+        "examples": ["bar_horizontal", "pie", "stacked_bar"]
       },
       "group_by": {
-        "type": "string",
-        "enum": ["airline", "aircraft_type", "origin", "destination", "stand", "gate", "hour", "status"],
-        "description": "Gruplama boyutu. airline: sefer numarasının ilk iki karakteri; aircraft_type: ICAO uçak tipi; origin ve destination: IATA kodu (yerel havalimanı XXXX görünür); stand ve gate: hareket kaydındaki kod; hour: planlanan saatin saat dilimi; status: cancelled, delayed ya da on_time.",
-        "examples": ["airline", "hour", "status"]
+        "type": "object",
+        "description": "Gruplama: field alan adı; zaman alanı ise bucket (hour ya da half_hour) zorunludur, diğer alanlarda bucket verilmez.",
+        "properties": {
+          "field": {
+            "type": "string",
+            "enum": ["airline", "flight_no", "callsign", "registration", "aircraft_type", "origin", "destination", "code_letter", "operator_iata", "movement_type", "stand_code", "gate_code", "stand_type", "max_code_letter", "delay_code", "delay_category", "cancelled", "status", "scheduled_time", "estimated_time", "actual_runway_time", "actual_block_time"],
+            "examples": ["airline", "movement_type", "scheduled_time"]
+          },
+          "bucket": {
+            "type": "string",
+            "enum": ["hour", "half_hour"],
+            "examples": ["hour"]
+          }
+        },
+        "required": ["field"],
+        "additionalProperties": false
       },
-      "metric": {
-        "type": "string",
-        "enum": ["count", "total_delay_minutes", "avg_delay_minutes"],
-        "default": "count",
-        "description": "Ölçü. count: uçuş sayısı. total_delay_minutes ve avg_delay_minutes: yalnızca gecikme kaydı olan uçuşlar üzerinden toplam ve ortalama dakika; gecikmeli uçuşu olmayan grup grafikte yer almaz. Kullanıcı ölçü belirtmediyse count ver.",
-        "examples": ["count", "total_delay_minutes"]
+      "series_by": {
+        "type": "object",
+        "description": "İsteğe bağlı ikinci boyut (group_by ile aynı biçim, farklı alan). stacked_bar, grouped_bar ve heatmap için zorunlu; pie ve doughnut ile verilmez.",
+        "properties": {
+          "field": {
+            "type": "string",
+            "enum": ["airline", "flight_no", "callsign", "registration", "aircraft_type", "origin", "destination", "code_letter", "operator_iata", "movement_type", "stand_code", "gate_code", "stand_type", "max_code_letter", "delay_code", "delay_category", "cancelled", "status", "scheduled_time", "estimated_time", "actual_runway_time", "actual_block_time"],
+            "examples": ["movement_type"]
+          },
+          "bucket": {
+            "type": "string",
+            "enum": ["hour", "half_hour"],
+            "examples": ["hour"]
+          }
+        },
+        "required": ["field"],
+        "additionalProperties": false
       },
-      "direction": {
-        "type": "string",
-        "enum": ["all", "arrival", "departure"],
-        "default": "all",
-        "description": "all: tüm uçuşlar, arrival: gelen uçuşlar, departure: giden uçuşlar. Kullanıcı yön belirtmediyse all ver.",
-        "examples": ["all", "arrival", "departure"]
+      "measure": {
+        "type": "object",
+        "default": {"agg": "count"},
+        "description": "Ölçü. count uçuş sayısıdır (field verilmez). sum, avg, min, max yalnızca delay_minutes üzerinden ve yalnızca gecikme kaydı olan uçuşlarla hesaplanır; avg bir ondalığa yuvarlanır. Kullanıcı ölçü belirtmediyse count ver.",
+        "properties": {
+          "agg": {
+            "type": "string",
+            "enum": ["count", "sum", "avg", "min", "max"],
+            "examples": ["count", "avg"]
+          },
+          "field": {
+            "type": "string",
+            "enum": ["delay_minutes"],
+            "examples": ["delay_minutes"]
+          }
+        },
+        "required": ["agg"],
+        "additionalProperties": false
       },
-      "include_cancelled": {
-        "type": "boolean",
-        "default": true,
-        "description": "true: iptal edilen uçuşlar da sayılır; false: iptaller kapsam dışıdır. Kullanıcı iptalleri hariç tutmak istemediyse true ver.",
-        "examples": [true, false]
+      "filters": {
+        "type": "array",
+        "default": [],
+        "description": "Süzgeçler (hepsi birlikte uygulanır). Zaman alanlarında value ISO 8601 zaman (saat dilimiyle) ya da tarihsiz \"HH:MM\" (kaydın yerel saatiyle karşılaştırılır). gt, ge, lt, le yalnızca sayısal ve zaman alanlarında; in için value en çok 20 öğeli dizidir. cancelled için value true ya da false.",
+        "items": {
+          "type": "object",
+          "properties": {
+            "field": {
+              "type": "string",
+              "enum": ["airline", "flight_no", "callsign", "registration", "aircraft_type", "origin", "destination", "code_letter", "operator_iata", "movement_type", "stand_code", "gate_code", "stand_type", "max_code_letter", "delay_code", "delay_category", "cancelled", "status", "scheduled_time", "estimated_time", "actual_runway_time", "actual_block_time", "delay_minutes"],
+              "examples": ["movement_type", "delay_minutes", "scheduled_time"]
+            },
+            "op": {
+              "type": "string",
+              "enum": ["eq", "ne", "in", "gt", "ge", "lt", "le"],
+              "examples": ["eq", "ge"]
+            },
+            "value": {
+              "type": ["string", "number", "boolean", "array"],
+              "items": {"type": ["string", "number", "boolean"]},
+              "examples": ["ARRIVAL", 60, "17:00"]
+            }
+          },
+          "required": ["field", "op", "value"],
+          "additionalProperties": false
+        }
+      },
+      "sort": {
+        "type": "string",
+        "enum": ["value_desc", "value_asc", "label"],
+        "default": "value_desc",
+        "description": "Grup sırası. Zaman kovası ve status gruplamasında yok sayılır (zaman ya da sabit sıra).",
+        "examples": ["value_desc"]
       },
       "limit": {
         "type": "integer",
-        "enum": [5, 10, 20],
+        "enum": [5, 10, 20, 50],
         "default": 10,
-        "description": "Gösterilecek en büyük grup sayısı (değere göre çoktan aza). hour ve status için yok sayılır, hepsi gösterilir. Kullanıcı belirtmediyse 10 ver.",
-        "examples": [5, 10, 20]
+        "description": "Gösterilecek en büyük grup sayısı. Zaman kovası ve status gruplamasında yok sayılır; series_by varken en çok 20 olabilir (hücre sınırı).",
+        "examples": [10, 20]
+      },
+      "derive": {
+        "type": "string",
+        "enum": ["pct_change_vs_previous"],
+        "description": "Önceki zaman kovasına göre değişimi serviste hesaplatır (items satırlarına change_pct ve trend eklenir). Yalnızca group_by zaman kovasıyla; ilk kovada ve önceki kova yoksa ya da sıfırsa değişim yoktur.",
+        "examples": ["pct_change_vs_previous"]
+      },
+      "plot": {
+        "type": "string",
+        "enum": ["value", "change_pct"],
+        "default": "value",
+        "description": "Grafiğin neyi çizeceği: value ölçü değeri, change_pct önceki kovaya göre değişim (derive zorunlu; bar_horizontal, bar_vertical, grouped_bar, line, area ile). Kullanıcı değişimi çizmek istemediyse value ver.",
+        "examples": ["value", "change_pct"]
       }
     },
     "required": ["chart_type", "group_by"],
@@ -60,60 +136,90 @@
       },
       "chart_type": {
         "type": "string",
-        "enum": ["bar_horizontal", "bar_vertical", "pie", "line"],
+        "enum": ["bar_horizontal", "bar_vertical", "stacked_bar", "grouped_bar", "pie", "doughnut", "line", "area", "heatmap"],
         "description": "Doğrulanmış chart_type argümanı.",
-        "examples": ["bar_horizontal"]
+        "examples": ["pie"]
       },
       "group_by": {
-        "type": "string",
-        "enum": ["airline", "aircraft_type", "origin", "destination", "stand", "gate", "hour", "status"],
+        "type": "object",
         "description": "Doğrulanmış group_by argümanı.",
-        "examples": ["airline"]
+        "properties": {
+          "field": {"type": "string", "examples": ["movement_type"]},
+          "bucket": {"type": "string", "enum": ["hour", "half_hour"], "examples": ["hour"]}
+        },
+        "required": ["field"],
+        "additionalProperties": false
       },
-      "metric": {
+      "series_by": {
+        "type": "object",
+        "description": "Doğrulanmış series_by argümanı; verilmediyse anahtar yoktur.",
+        "properties": {
+          "field": {"type": "string", "examples": ["movement_type"]},
+          "bucket": {"type": "string", "enum": ["hour", "half_hour"], "examples": ["hour"]}
+        },
+        "required": ["field"],
+        "additionalProperties": false
+      },
+      "measure": {
+        "type": "object",
+        "description": "Doğrulanmış measure argümanı.",
+        "properties": {
+          "agg": {"type": "string", "enum": ["count", "sum", "avg", "min", "max"], "examples": ["count"]},
+          "field": {"type": "string", "enum": ["delay_minutes"], "examples": ["delay_minutes"]}
+        },
+        "required": ["agg"],
+        "additionalProperties": false
+      },
+      "derive": {
         "type": "string",
-        "enum": ["count", "total_delay_minutes", "avg_delay_minutes"],
-        "description": "Doğrulanmış metric argümanı.",
-        "examples": ["count"]
+        "enum": ["pct_change_vs_previous"],
+        "description": "Doğrulanmış derive argümanı; verilmediyse anahtar yoktur.",
+        "examples": ["pct_change_vs_previous"]
+      },
+      "plot": {
+        "type": "string",
+        "enum": ["value", "change_pct"],
+        "description": "Doğrulanmış plot argümanı.",
+        "examples": ["value"]
       },
       "flights": {
         "type": "integer",
-        "description": "Yön ve iptal süzgecinden geçen uçuş sayısı; yetim kayıtlar hariç.",
-        "examples": [300]
+        "description": "Süzgeçten geçen uçuş sayısı; yetim kayıtlar ve hareketi olmayan uçuşlar hariç.",
+        "examples": [600]
       },
       "groups_total": {
         "type": "integer",
-        "description": "Süzülen uçuşların oluşturduğu toplam grup sayısı; items bundan kısa olabilir (limit).",
-        "examples": [10]
+        "description": "Kesilmeden önce değeri olan grup sayısı; items bundan az grup içerebilir (limit).",
+        "examples": [2]
       },
       "unclassified": {
         "type": "integer",
-        "description": "Kapsamdaki, ama gruplama boyutu kayıtta olmadığı için hiçbir gruba girmeyen uçuş sayısı (ör. iptal edilen uçuşun stand'i yoktur).",
+        "description": "Süzgeçten geçen, ama group_by ya da series_by alanı kayıtta olmadığı için hiçbir gruba girmeyen uçuş sayısı.",
+        "examples": [0]
+      },
+      "series_truncated": {
+        "type": "integer",
+        "description": "series_by varken kesilen (en büyük 8'e girmeyen) seri sayısı; series_by yoksa anahtar yoktur.",
         "examples": [0]
       },
       "items": {
         "type": "array",
-        "description": "Grafiğin noktaları. hour için saat artan, status için cancelled, delayed, on_time sırasıyla; diğerlerinde değer çoktan aza, eşitlikte etiket artan sırayla.",
+        "description": "Grafiğin noktaları, grup sırasıyla; grup içinde seri sırasıyla. Zaman kovasında saat artan, status'ta cancelled-delayed-on_time sırası, diğerlerinde sort.",
         "items": {
           "type": "object",
           "properties": {
-            "label": {
-              "type": "string",
-              "description": "Grubun etiketi (havayolu kodu, uçak tipi, saat dilimi vb.).",
-              "examples": ["TK"]
-            },
-            "value": {
-              "type": "number",
-              "description": "Grubun ölçü değeri: uçuş sayısı, toplam ya da ortalama gecikme dakikası (ortalama bir ondalığa yuvarlanır).",
-              "examples": [154]
-            }
+            "label": {"type": "string", "description": "Grup etiketi (havayolu kodu, uçak tipi, kova başlangıcı HH:MM vb.).", "examples": ["TK", "18:00"]},
+            "series": {"type": "string", "description": "Seri etiketi; yalnızca series_by varsa.", "examples": ["ARRIVAL"]},
+            "value": {"type": "number", "description": "Ölçü değeri: uçuş sayısı, toplam/ortalama/en küçük/en büyük gecikme dakikası (ortalama bir ondalık).", "examples": [154]},
+            "change_pct": {"type": "number", "description": "Önceki kovaya göre yüzde değişim (bir ondalık); yalnızca derive varsa ve önceki kova değeri sıfırdan büyükse.", "examples": [25.0]},
+            "trend": {"type": "string", "enum": ["up", "down", "flat"], "description": "Değişimin yönü; change_pct ile birlikte.", "examples": ["up"]}
           },
           "required": ["label", "value"],
           "additionalProperties": false
         }
       }
     },
-    "required": ["date", "chart_type", "group_by", "metric", "flights", "groups_total", "unclassified", "items"],
+    "required": ["date", "chart_type", "group_by", "measure", "plot", "flights", "groups_total", "unclassified", "items"],
     "additionalProperties": false
   }
 }
